@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<NML VERSION="19">
+<COLLECTION ENTRIES="2">
+  <ENTRY MODIFIED_DATE="2026/1/2" TITLE="One" ARTIST="Swendl">
+    <LOCATION DIR="/:DJ/:" FILE="one.mp3" VOLUME="Music" VOLUMEID="c0ffee"></LOCATION>
+    <INFO BITRATE="320000" GENRE="House" KEY="Am"></INFO>

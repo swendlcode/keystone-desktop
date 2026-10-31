@@ -1,0 +1,102 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Universal binary so the DMG runs on both Apple Silicon and Intel Macs.
+          # GitHub's macOS runners are arm64 only, so x86_64 is cross-compiled.
+          - os: macos-latest
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin
+          - os: windows-latest
+            rust-targets: ''
+            args: ''
+
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      # The tag is the single source of truth for the version. Both files are
+      # rewritten here rather than kept in sync by hand, because a Cargo.toml
+      # that disagrees with tauri.conf.json ships an installer whose updater
+      # compares the wrong number and never offers the update.
+      - name: Set version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > tmp.json && mv tmp.json src-tauri/tauri.conf.json
+          sed -i.bak "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml && rm -f src-tauri/Cargo.toml.bak
+
+      # The release notes are the changelog entry, so the notes a user reads on
+      # GitHub and the notes the app shows cannot drift apart.
+      - name: Build release notes from changelog
+        id: notes
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          {
+            echo 'body<<CHANGELOG_EOF'
+            jq -r --arg v "$VERSION" '
+              .[$v] as $r
+              | if $r == null
+                then "Release " + $v
+                else "### " + $r.title + "\n\n" + $r.summary + "\n\n"
+                     + ($r.highlights | map("- " + .) | join("\n"))
+                end
+            ' src/data/changelog.json
+            echo ''
+            echo '—'
+            echo 'Visit [keystone.swendl.com](https://keystone.swendl.com) for more information.'
+            echo 'CHANGELOG_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Build and upload to release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs the update artifacts and emits latest.json, which the in-app
+          # updater reads from the latest release. Without these the build still
+          # succeeds but ships no update manifest, so every install stays where
+          # it is with no error anywhere. The private key lives only in repo
+          # secrets and under .updater-keys/ locally; it is not recoverable, and
+          # losing it means every existing install has to be replaced by hand.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Keystone ${{ github.ref_name }}
+          releaseBody: ${{ steps.notes.outputs.body }}
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+          includeUpdaterJson: true

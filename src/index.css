@@ -1,0 +1,312 @@
+/* Syne for headings/labels, DM Mono for every number — must precede all other
+   rules. The same two faces are used by Stack and Capstone, so the three apps
+   read as one family. */
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Keystone theme tokens.
+
+  Tokens are stored as space-separated RGB triplets (no rgb() wrapper, no
+  commas) so Tailwind's palette can compose them with `<alpha-value>` —
+  e.g. `bg-keystone-lime/10` resolves to `rgb(var(--keystone-lime) / 0.1)`.
+  This pattern is required for opacity modifiers to work on var-backed colors.
+
+  Direct CSS consumers (sliders, body, .badge) wrap the triplet themselves:
+  `background: rgb(var(--keystone-lime));` or use the semantic --color-* vars,
+  which already include the rgb() wrapper.
+
+  Naming caveat, inherited from Stack: --keystone-black / --keystone-white are
+  the brand background / foreground tokens. In the light theme their VALUES
+  flip, so the names read backwards but render correctly. Prefer the --color-*
+  semantic tokens in new code.
+*/
+:root {
+  --keystone-black: 11 13 10;      /* #0b0d0a  page background */
+  --keystone-lime: 153 242 63;     /* #99f23f  accent / CTA */
+  --keystone-moss: 135 217 54;     /* #87d936  accent shade, pressed + gradients */
+  --keystone-white: 247 247 247;   /* #f7f7f7  primary foreground */
+
+  --gray-900: 17 18 16;            /* #111210 */
+  --gray-800: 26 28 25;            /* #1a1c19 */
+  --gray-700: 36 38 35;            /* #242623 */
+  --gray-600: 51 54 50;            /* #333632 */
+  --gray-500: 85 88 84;            /* #555854 */
+  --gray-400: 136 139 135;         /* #888b87 */
+  --gray-300: 170 172 169;         /* #aaaca9 */
+  --gray-200: 204 206 203;         /* #cccecb */
+  --gray-100: 238 239 238;         /* #eeefee */
+
+  --color-bg: rgb(var(--keystone-black));
+  --color-surface: rgb(var(--gray-800));
+  --color-surface-alt: rgb(var(--gray-700));
+  --color-border: rgb(var(--gray-600));
+  --color-text: rgb(var(--keystone-white));
+  --color-text-muted: rgb(var(--gray-400));
+  --color-text-subtle: rgb(var(--gray-500));
+  --color-accent: rgb(var(--keystone-lime));
+  --color-accent-shade: rgb(var(--keystone-moss));
+  --color-accent-hover: #adf85f;
+  /* Foreground that sits ON the accent. The accent is a bright lime, so this
+     is near-black in both themes — never --color-text, which inverts. */
+  --color-on-accent: #0b0d0a;
+
+  color-scheme: dark;
+}
+
+/* Light theme — semantic flip. Same names, inverted values.
+   `bg-gray-900` now resolves to white-ish; `text-keystone-white` to near-black.
+   The lime is pulled well down in lightness: #99f23f on white fails contrast at
+   any text size, and the accent carries buttons and the playing-key highlight. */
+:root[data-theme='light'] {
+  --keystone-black: 255 255 255;   /* #ffffff  page background */
+  --keystone-lime: 95 168 27;      /* #5fa81b  accent, legible on white */
+  --keystone-moss: 79 142 22;      /* #4f8e16  accent shade */
+  --keystone-white: 15 16 15;      /* #0f100f  primary foreground */
+
+  --gray-900: 255 255 255;         /* #ffffff  app shell, title bar */
+  --gray-800: 245 246 245;         /* #f5f6f5  cards, sidebar wells */
+  --gray-700: 230 231 230;         /* #e6e7e6  borders, dividers */
+  --gray-600: 208 209 208;         /* #d0d1d0  heavy borders, slider track */
+  --gray-500: 160 161 160;         /* #a0a1a0  faint icons */
+  --gray-400: 107 108 107;         /* #6b6c6b  muted body text */
+  --gray-300: 77 78 77;            /* #4d4e4d  secondary text */
+  --gray-200: 44 45 44;            /* #2c2d2c  near-foreground */
+  --gray-100: 26 27 26;            /* #1a1b1a  strongest non-fg */
+
+  --color-bg: rgb(var(--keystone-black));
+  --color-surface: rgb(var(--gray-800));
+  --color-surface-alt: rgb(var(--gray-700));
+  --color-border: rgb(var(--gray-600));
+  --color-text: rgb(var(--keystone-white));
+  --color-text-muted: rgb(var(--gray-400));
+  --color-text-subtle: rgb(var(--gray-500));
+  --color-accent: rgb(var(--keystone-lime));
+  --color-accent-shade: rgb(var(--keystone-moss));
+  --color-accent-hover: #4f8e16;
+  --color-on-accent: #ffffff;
+
+  color-scheme: light;
+}
+
+/*
+  ── The Camelot colour scale ───────────────────────────────────────────────
+  All 24 keys, defined once. The wheel segments, the KEY RESULT badges in the
+  library table and the player readout all read these; nothing hardcodes a hex.
+
+  Construction: hue walks the circle of fifths at 30 deg per Camelot step,
+  starting 1A/1B at 210 deg. Adjacent numbers are therefore adjacent hues,
+  which is the whole point — a compatible neighbour LOOKS adjacent. The B ring
+  (major) is the lighter, more saturated pair of each hue; the A ring (minor)
+  is the darker one, so the A/B switch is visible without reading the letter.
+
+  Identical in both themes on purpose: these are swatches with their own
+  foreground (--camelot-fg-*), not theme surfaces, and a DJ who learns the
+  wheel's colours should not have them move when the app goes light.
+*/
+:root {
+  --camelot-1a: 49 117 185;    --camelot-1b: 78 153 228;
+  --camelot-2a: 49 49 185;     --camelot-2b: 78 78 228;
+  --camelot-3a: 117 49 185;    --camelot-3b: 153 78 228;
+  --camelot-4a: 185 49 185;    --camelot-4b: 228 78 228;
+  --camelot-5a: 185 49 117;    --camelot-5b: 228 78 153;
+  --camelot-6a: 185 49 49;     --camelot-6b: 228 78 78;
+  --camelot-7a: 185 117 49;    --camelot-7b: 228 153 78;
+  --camelot-8a: 185 185 49;    --camelot-8b: 228 228 78;
+  --camelot-9a: 117 185 49;    --camelot-9b: 153 228 78;
+  --camelot-10a: 49 185 49;    --camelot-10b: 78 228 78;
+  --camelot-11a: 49 185 117;   --camelot-11b: 78 228 153;
+  --camelot-12a: 49 185 185;   --camelot-12b: 78 228 228;
+
+  /* Text on a filled swatch. The A ring is dark enough for white; the B ring
+     is not, so it takes near-black. Two tokens rather than twenty-four. */
+  --camelot-fg-a: #f7f7f7;
+  --camelot-fg-b: #0b0d0a;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: 'Syne', system-ui, sans-serif;
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+    overflow: hidden;
+  }
+
+  input,
+  textarea {
+    user-select: text;
+    font-family: 'Syne', system-ui, sans-serif;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--gray-700));
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--gray-500));
+  }
+}
+
+@layer components {
+  /* Every number in Keystone is monospaced: BPM, Camelot, cents, energy,
+     timecodes, paths. A column of tempos that does not line up is unreadable. */
+  .mono {
+    font-family: 'DM Mono', ui-monospace, monospace;
+  }
+
+  .surface {
+    background: var(--color-surface);
+  }
+
+  .border-subtle {
+    border-color: var(--color-border);
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  /* Section labels: SPEC.md writes them uppercase (ADD TRACKS, 412 TRACKS,
+     CUE POINTS), which is a type style rather than copy the builder retypes. */
+  .label {
+    font-family: 'Syne', system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+
+  .ks-slider {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%;
+    height: 16px;
+    border-radius: 2px;
+    background: transparent;
+    outline: none;
+    cursor: pointer;
+    touch-action: pan-y;
+  }
+
+  .ks-slider:focus-visible {
+    outline: 2px solid rgb(var(--keystone-lime) / 0.7);
+    outline-offset: 2px;
+  }
+
+  .ks-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background: linear-gradient(
+      to right,
+      rgb(var(--keystone-lime)) 0%,
+      rgb(var(--keystone-lime)) var(--slider-pct, 0%),
+      rgb(var(--gray-600)) var(--slider-pct, 0%),
+      rgb(var(--gray-600)) 100%
+    );
+  }
+
+  .ks-slider::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    margin-top: -5px; /* centre the 14px thumb on the 4px track */
+    height: 14px;
+    width: 14px;
+    border-radius: 50%;
+    background: rgb(var(--keystone-lime));
+    border: 2px solid var(--color-bg);
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.45);
+  }
+
+  .ks-slider::-moz-range-track {
+    height: 4px;
+    border-radius: 999px;
+    background: rgb(var(--gray-600));
+  }
+
+  .ks-slider::-moz-range-progress {
+    height: 4px;
+    border-radius: 999px;
+    background: rgb(var(--keystone-lime));
+  }
+
+  .ks-slider::-moz-range-thumb {
+    height: 14px;
+    width: 14px;
+    border-radius: 50%;
+    background: rgb(var(--keystone-lime));
+    border: 2px solid var(--color-bg);
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.45);
+  }
+
+  .ks-slider::-moz-focus-outer {
+    border: 0;
+  }
+}
+
+@layer utilities {
+  .drag-region {
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+
+  /* Full app height. `100dvh` tracks browser chrome that grows and shrinks;
+     the `100vh` line before it is the fallback for webviews predating dvh. */
+  .h-app {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Numeric table cells: tabular figures so a tempo column aligns on the
+     decimal point even at one or two places. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}

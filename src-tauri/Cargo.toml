@@ -1,0 +1,103 @@
+[package]
+name = "keystone"
+version = "0.1.0"
+description = "Harmonic-mixing analysis for DJ libraries"
+authors = ["Swendl"]
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "keystone_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+default = []
+# The GiantSteps+ / MIREX scoring harness. Dev-only: it reads a corpus from
+# disk and must never be part of a shipped bundle.
+eval = []
+# Beat This! is behind a gate because the fp32 ONNX export is 190 MB and the
+# classical S8 phase may already agree with it on >90% of tracks. ENGINE.md §2
+# says measure before bundling.
+beat-this = []
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset", "macos-private-api"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+rayon = "1.12"
+
+rusqlite = { version = "0.31", features = ["bundled"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.24"
+
+# --- audio -------------------------------------------------------------------
+# Pinned to 0.5, not 0.6: the proven streaming-decode call site is a 0.5 API and
+# 0.6 is a declared breaking change. Porting is its own task, in a decode module
+# shared with Capstone, so it is paid for once. MPL-2.0, file-level copyleft —
+# listed in THIRD-PARTY-LICENSES and never patched in-tree.
+symphonia = { version = "0.5", features = ["mp3", "wav", "flac", "ogg", "aiff", "isomp4", "alac", "aac"] }
+rubato = "5.0.1"
+rustfft = "6.4.1"
+realfft = "3.5.1"
+ndarray = "0.17"
+ebur128 = "0.1.11"
+
+# Release candidate with an ABI pinned to one ONNX Runtime build, so the version
+# is exact with no caret. On Windows the DLLs ship beside the binary: a stale
+# system onnxruntime.dll would otherwise shadow the bundled one.
+ort = "=2.0.0-rc.15"
+
+# --- tags --------------------------------------------------------------------
+# Never round-trip through lofty's generic `Tag`: its own docs say conversion
+# drops anything without a mapping, which would silently delete every Serato
+# GEOB, Traktor blob and ReplayGain frame in the library. Concrete tag types only.
+lofty = "0.25.5"
+filetime = "0.2.29"
+
+# --- export ------------------------------------------------------------------
+quick-xml = "0.42"
+
+# --- filesystem --------------------------------------------------------------
+notify = "6"
+notify-debouncer-full = "0.3"
+walkdir = "2"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+unicode-normalization = "0.1.26"
+same-file = "1.0.6"
+tempfile = "3"
+
+# --- plumbing ----------------------------------------------------------------
+uuid = { version = "1", features = ["v4", "serde"] }
+parking_lot = "0.12"
+thiserror = "1"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+# The decode benchmark is the first task of the build: the 0.43 s figure in
+# ENGINE.md §2 is ffmpeg's hand-tuned MP3 path and symphonia's multiplier is an
+# assumption, not a measurement.
+criterion = "0.8.2"
+
+[[bench]]
+name = "decode"
+harness = false
+
+# The accuracy harness, as a command. Dev-only: `required-features` keeps it out
+# of any build that does not ask for the `eval` feature, and the bundle does not.
+[[bin]]
+name = "keystone-eval"
+path = "src/bin/eval.rs"
+required-features = ["eval"]

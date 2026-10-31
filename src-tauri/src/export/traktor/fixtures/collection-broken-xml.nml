@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<NML VERSION="19">
+<COLLECTION ENTRIES="1">
+  <ENTRY TITLE="One">
+    <LOCATION DIR="/:DJ/:" FILE="one.mp3 VOLUME="Music"></LOCATION>
+  </ENTRY>
+</COLLECTION>
+</NML

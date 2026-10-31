@@ -1,0 +1,34 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Rust / Tauri
+src-tauri/target/
+
+# Updater signing keys — losing these means no install can verify an update,
+# so they live outside the repo and are backed up by hand.
+.updater-keys/
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# TypeScript / Vite build artifacts. `tsc -b` emits these next to the sources,
+# and vite.config.js is the compiled twin of vite.config.ts.
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
