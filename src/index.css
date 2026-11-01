@@ -97,32 +97,53 @@
   All 24 keys, defined once. The wheel segments, the KEY RESULT badges in the
   library table and the player readout all read these; nothing hardcodes a hex.
 
-  Construction: hue walks the circle of fifths at 30 deg per Camelot step,
-  starting 1A/1B at 210 deg. Adjacent numbers are therefore adjacent hues,
-  which is the whole point — a compatible neighbour LOOKS adjacent. The B ring
-  (major) is the lighter, more saturated pair of each hue; the A ring (minor)
-  is the darker one, so the A/B switch is visible without reading the letter.
+  Generated in OKLCH, not mixed in RGB, and that is the whole point. Three
+  invariants hold here that cannot be held by picking channel values by hand,
+  and all three are load-bearing for a wheel you are meant to read at a glance:
+
+  1. Hue is spaced 30 deg apart in PERCEPTUAL hue, starting 1A/1B at 250 deg,
+     so adjacent Camelot numbers look adjacent and no two keys collide. An
+     earlier scale set channels to 49/117/185 and claimed 30 deg steps; it
+     measured 10 to 56 deg, crushing 9A, 10A and 11A into 23 deg of green.
+  2. Lightness is constant within a ring: every A is OKLab L 0.53, every B is
+     0.72. So the A/B switch reads as a lightness step everywhere on the wheel.
+     Under the old scale 8A (L 0.76) was lighter than 2B (L 0.52) and the ring
+     distinction inverted across the top half.
+  3. Chroma is pushed to the sRGB gamut limit for each hue at that lightness,
+     which is as vivid as the display can render. Chroma therefore varies by
+     hue (0.09 at teal to 0.27 at violet) because the gamut is not a cylinder.
+     Holding chroma equal instead would cap every hue at the worst one's 0.09
+     and wash the entire wheel out.
+
+  Because lightness is constant per ring, ONE foreground token per ring is
+  provably enough: every A clears 4.5:1 against --camelot-fg-a (worst 4.65:1,
+  10A) and every B clears it against --camelot-fg-b (worst 6.99:1, 4B). The old
+  scale failed that on nine of 24 swatches, 8A worst at 1.95:1 — a white label
+  on a light olive wedge.
+
+  Regenerate with scripts/camelot-scale.mjs rather than editing a value here;
+  editing one breaks the invariant that makes the foreground tokens valid.
 
   Identical in both themes on purpose: these are swatches with their own
   foreground (--camelot-fg-*), not theme surfaces, and a DJ who learns the
   wheel's colours should not have them move when the app goes light.
 */
 :root {
-  --camelot-1a: 49 117 185;    --camelot-1b: 78 153 228;
-  --camelot-2a: 49 49 185;     --camelot-2b: 78 78 228;
-  --camelot-3a: 117 49 185;    --camelot-3b: 153 78 228;
-  --camelot-4a: 185 49 185;    --camelot-4b: 228 78 228;
-  --camelot-5a: 185 49 117;    --camelot-5b: 228 78 153;
-  --camelot-6a: 185 49 49;     --camelot-6b: 228 78 78;
-  --camelot-7a: 185 117 49;    --camelot-7b: 228 153 78;
-  --camelot-8a: 185 185 49;    --camelot-8b: 228 228 78;
-  --camelot-9a: 117 185 49;    --camelot-9b: 153 228 78;
-  --camelot-10a: 49 185 49;    --camelot-10b: 78 228 78;
-  --camelot-11a: 49 185 117;   --camelot-11b: 78 228 153;
-  --camelot-12a: 49 185 185;   --camelot-12b: 78 228 228;
+  --camelot-1a: 0 110 190;       --camelot-1b: 80 169 255;
+  --camelot-2a: 92 58 255;       --camelot-2b: 147 152 255;
+  --camelot-3a: 154 0 219;       --camelot-3b: 202 123 255;
+  --camelot-4a: 185 0 148;       --camelot-4b: 255 86 211;
+  --camelot-5a: 199 0 79;        --camelot-5b: 255 108 139;
+  --camelot-6a: 183 62 0;        --camelot-6b: 255 117 66;
+  --camelot-7a: 149 94 0;        --camelot-7b: 225 144 0;
+  --camelot-8a: 123 108 0;       --camelot-8b: 187 165 0;
+  --camelot-9a: 79 123 0;        --camelot-9b: 123 187 0;
+  --camelot-10a: 0 128 83;       --camelot-10b: 0 195 128;
+  --camelot-11a: 0 124 119;      --camelot-11b: 0 189 182;
+  --camelot-12a: 0 120 146;      --camelot-12b: 0 183 221;
 
-  /* Text on a filled swatch. The A ring is dark enough for white; the B ring
-     is not, so it takes near-black. Two tokens rather than twenty-four. */
+  /* Text on a filled swatch. Valid as two tokens only because lightness is
+     constant per ring; see invariant 2 above. */
   --camelot-fg-a: #f7f7f7;
   --camelot-fg-b: #0b0d0a;
 }

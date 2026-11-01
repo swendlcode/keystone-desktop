@@ -1,4 +1,4 @@
-import { camelotColorAlpha } from '../../utils/camelotColors';
+import { camelotColorAlpha, camelotForeground } from '../../utils/camelotColors';
 import { formatCamelot, type CamelotKey } from '../../utils/camelot';
 import {
   labelPoint,
@@ -55,15 +55,12 @@ export function WheelSegment({
   const label = labelPoint(bearingDeg, camelotKey.letter);
   const empty = state === 'empty';
 
-  // The A ring is the dark half of each hue pair, so a filled A segment takes
-  // the light foreground and a filled B segment the dark one. Unfilled
-  // segments ignore both and use the theme's own text colour.
+  // Only a filled segment needs the swatch's own foreground; the rest take the
+  // theme's text colour. Which foreground belongs to which ring is decided in
+  // camelotColors, because that rule is only valid while the generated scale
+  // holds lightness constant per ring and it must not be restated here.
   const labelFill =
-    state === 'selected'
-      ? camelotKey.letter === 'A'
-        ? 'var(--camelot-fg-a)'
-        : 'var(--camelot-fg-b)'
-      : 'currentColor';
+    (state === 'selected' ? camelotForeground(code) : null) ?? 'currentColor';
 
   return (
     <g
