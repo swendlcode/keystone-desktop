@@ -1,13 +1,7 @@
 import { Checkbox } from '../ui/Checkbox';
-import { RadioGroup } from '../ui/Radio';
 import { SettingGroup, SettingNote, SettingSection } from './SettingSection';
 import { useSettingsWriter } from './useSettingsWriter';
 import type { Settings } from '../../types';
-
-const LOAD_BEHAVIOUR = [
-  { value: 'auto', label: 'Play automatically when loaded' },
-  { value: 'click', label: 'Require a click' },
-];
 
 /** Auditioning behaviour. */
 export function AudioPlayerPane({ settings }: { settings: Settings }) {
@@ -15,15 +9,17 @@ export function AudioPlayerPane({ settings }: { settings: Settings }) {
 
   return (
     <SettingSection title="Audio Player">
-      <SettingGroup label="On load">
-        <RadioGroup
-          name="playAutomatically"
-          value={settings.playAutomatically ? 'auto' : 'click'}
-          options={LOAD_BEHAVIOUR}
-          onChange={(v) => write({ playAutomatically: v === 'auto' })}
-        />
+      {/* The radio that used to sit here chose whether selecting a row also
+          auditioned it. Nothing selects-and-plays any more — a double-click
+          plays and a click only selects — so the choice had no behaviour
+          left behind it. A control that switches nothing is worse than no
+          control. The field stays in Settings for the backend; only the
+          switch is gone. */}
+      <SettingGroup label="Auditioning">
         <SettingNote>
-          Require a click when other DJ software is holding the audio device.
+          Double-click a track to play it. A single click only selects, so
+          moving through the list never takes the audio device from other DJ
+          software.
         </SettingNote>
       </SettingGroup>
 

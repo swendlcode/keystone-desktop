@@ -103,10 +103,10 @@ export function CueRegions({
             : `Play the section starting at ${formatTime(startS)}`
         }
         style={{ left: `${centre * 100}%` }}
-        className={`absolute top-1/2 z-20 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full shadow-lg ring-1 transition-colors ${
+        className={`absolute top-1/2 z-20 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full transition-colors ${
           playingHere
-            ? 'bg-keystone-lime text-[color:var(--color-on-accent)] ring-keystone-lime'
-            : 'bg-gray-900/85 text-keystone-white ring-gray-600 hover:bg-keystone-lime hover:text-[color:var(--color-on-accent)]'
+            ? 'bg-keystone-lime text-[color:var(--color-on-accent)]'
+            : 'bg-gray-900/85 text-keystone-white hover:bg-keystone-lime hover:text-[color:var(--color-on-accent)]'
         }`}
       >
         {playingHere ? (

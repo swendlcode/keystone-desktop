@@ -14,8 +14,6 @@ interface TrackRowProps extends CellFormat {
   playing: boolean;
   onRowMouseDown: (e: React.MouseEvent, index: number) => void;
   onRowDoubleClick: (index: number) => void;
-  onRowDragStart: (e: React.DragEvent, index: number) => void;
-  onRowDragEnd: () => void;
   onRowContextMenu: (e: React.MouseEvent, index: number) => void;
   onRate: (trackId: string, rating: number) => void;
 }
@@ -42,8 +40,6 @@ export const TrackRow = memo(function TrackRow({
   decimals,
   onRowMouseDown,
   onRowDoubleClick,
-  onRowDragStart,
-  onRowDragEnd,
   onRowContextMenu,
   onRate,
 }: TrackRowProps) {
@@ -59,17 +55,11 @@ export const TrackRow = memo(function TrackRow({
     <div
       role="row"
       aria-selected={selected}
-      draggable
       onMouseDown={(e) => onRowMouseDown(e, index)}
       onDoubleClick={() => onRowDoubleClick(index)}
-      onDragStart={(e) => onRowDragStart(e, index)}
-      onDragEnd={onRowDragEnd}
       onContextMenu={(e) => onRowContextMenu(e, index)}
       style={{ gridTemplateColumns: gridTemplate }}
-      // `cursor-grab`: the row is a drag source and said nothing about it.
-      // A default arrow over something draggable is the whole reason the
-      // gesture goes undiscovered.
-      className={`grid h-full cursor-grab items-center gap-3 border-b border-gray-800/60 px-3 text-xs active:cursor-grabbing ${
+      className={`grid h-full cursor-default items-center gap-3 border-b border-gray-800/60 px-3 text-xs ${
         selected ? 'bg-keystone-lime/10' : 'hover:bg-gray-800/60'
       } ${playing ? 'shadow-[inset_2px_0_0_0_var(--color-accent)]' : ''}`}
     >

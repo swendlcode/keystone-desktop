@@ -37,7 +37,7 @@ export function TrackTable({ window: win, onPageChange }: TrackTableProps) {
   const selectedIds = useLibraryStore((s) => s.selectedIds);
   const playingId = usePlayerStore((s) => s.currentTrack?.id ?? null);
 
-  const rows = useRowInteraction(win, settings?.playAutomatically ?? false);
+  const rows = useRowInteraction(win);
   useSelectAll(useMemo(() => win.loaded.map((t) => t.id), [win.loaded]));
 
   const columnOrder = useUiStore((s) => s.columnOrder);
@@ -112,8 +112,6 @@ export function TrackTable({ window: win, onPageChange }: TrackTableProps) {
                     decimals={settings?.tempoDecimals ?? 0}
                     onRowMouseDown={rows.onRowMouseDown}
                     onRowDoubleClick={rows.onRowDoubleClick}
-                    onRowDragStart={rows.onRowDragStart}
-                    onRowDragEnd={rows.onRowDragEnd}
                     onRowContextMenu={rows.onRowContextMenu}
                     onRate={onRate}
                   />

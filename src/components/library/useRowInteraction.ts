@@ -1,7 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { setTrackDrag } from '../collections/dragTypes';
 import type { TrackWindow } from './useTrackWindow';
-import { useCollectionStore } from '../../stores/collectionStore';
 import { useLibraryStore } from '../../stores/libraryStore';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -10,19 +8,22 @@ import type { Track } from '../../types';
 /**
  * Click, double-click and right-click on a library row.
  *
- * Every handler is built once and reads the current window and the auto-play
- * setting from refs. They have to be stable for `TrackRow`'s memo to mean
- * anything, and the window object is a new identity on every fetch — so a
- * dependency array would rebuild them, and with them every mounted row, at
- * each page boundary.
+ * A click selects; a DOUBLE click plays. Selecting used to audition too,
+ * behind a setting — which made every pass through the list with the arrow
+ * keys or a stray click start audio, and meant selecting twenty rows for a
+ * bulk edit played twenty opening bars. Starting playback is a deliberate
+ * act and gets a deliberate gesture.
+ *
+ * Every handler is built once and reads the current window from a ref. They
+ * have to be stable for `TrackRow`'s memo to mean anything, and the window
+ * object is a new identity on every fetch — so a dependency array would
+ * rebuild them, and with them every mounted row, at each page boundary.
  */
-export function useRowInteraction(window: TrackWindow, autoPlay: boolean) {
+export function useRowInteraction(window: TrackWindow) {
   const anchorRef = useRef(0);
 
   const winRef = useRef(window);
   winRef.current = window;
-  const autoPlayRef = useRef(autoPlay);
-  autoPlayRef.current = autoPlay;
 
   const play = useCallback((track: Track) => {
     const player = usePlayerStore.getState();
@@ -56,11 +57,8 @@ export function useRowInteraction(window: TrackWindow, autoPlay: boolean) {
       }
       anchorRef.current = index;
       store.select(track.id);
-      // SPEC.md's Audio Player setting: auditioning on select is the default,
-      // and off is for when a DJ app already owns the audio device.
-      if (autoPlayRef.current) play(track);
     },
-    [play],
+    [],
   );
 
   const onRowDoubleClick = useCallback(
@@ -70,29 +68,6 @@ export function useRowInteraction(window: TrackWindow, autoPlay: boolean) {
     },
     [play],
   );
-
-  /**
-   * Drag rows out to a collection in the sidebar.
-   *
-   * The collection rows have understood this payload since they were written;
-   * the library table simply never produced one, so the only way to file a
-   * track was from the tag view. Dragging a row that is outside the selection
-   * drags that row alone, which is what every file manager does and what the
-   * tag table already did.
-   */
-  const onRowDragStart = useCallback((e: React.DragEvent, index: number) => {
-    const track = winRef.current.trackAt(index);
-    if (!track) return;
-    const selected = useLibraryStore.getState().selectedIds;
-    const ids = selected.has(track.id) ? [...selected] : [track.id];
-    setTrackDrag(e.dataTransfer, ids);
-    // Lights the collections, so the drag has somewhere visibly to go.
-    useCollectionStore.getState().setDraggingTracks(ids.length);
-  }, []);
-
-  const onRowDragEnd = useCallback(() => {
-    useCollectionStore.getState().setDraggingTracks(null);
-  }, []);
 
   const onRowContextMenu = useCallback((e: React.MouseEvent, index: number) => {
     const track = winRef.current.trackAt(index);
@@ -117,8 +92,6 @@ export function useRowInteraction(window: TrackWindow, autoPlay: boolean) {
     play,
     onRowMouseDown,
     onRowDoubleClick,
-    onRowDragStart,
-    onRowDragEnd,
     onRowContextMenu,
   };
 }

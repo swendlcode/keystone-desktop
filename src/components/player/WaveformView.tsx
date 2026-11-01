@@ -19,6 +19,15 @@ interface WaveformViewProps {
 const HEIGHT = 84;
 
 /**
+ * How much wheel delta buys one zoom step.
+ *
+ * Roughly one notch of a mouse wheel, which reports ~100-120 per notch, so a
+ * mouse keeps its one-notch-one-step feel. A trackpad reports single digits
+ * per event, so a step takes a deliberate swipe rather than a twitch.
+ */
+const ZOOM_STEP_DELTA = 110;
+
+/**
  * The full-width waveform with its eight cue markers.
  *
  * The peaks are a pyramid on disk keyed by content hash, so they arrive once
@@ -247,6 +256,8 @@ function useWaveformWheel(
 ) {
   const durationRef = useRef(durationS);
   durationRef.current = durationS;
+  /** Wheel delta banked towards the next zoom step. */
+  const banked = useRef(0);
 
   useEffect(() => {
     const box = boxRef.current;
@@ -281,10 +292,26 @@ function useWaveformWheel(
       }
 
       e.preventDefault();
-      const next = Math.max(
-        0,
-        Math.min(MAX_ZOOM, store.zoom + (e.deltaY < 0 ? 1 : -1)),
-      );
+
+      // Each step doubles the magnification, so one step per wheel event is
+      // far too much: a trackpad sends dozens of events per swipe and the
+      // view went from the whole track to two seconds before the fingers
+      // lifted. Delta is banked until it is worth a step. The threshold is
+      // about one notch of a mouse wheel, so a mouse still steps per notch
+      // while a trackpad takes a deliberate swipe.
+      //
+      // Reversing direction spends the bank rather than fighting it, so a
+      // correction responds immediately instead of having to pay off what
+      // was accumulated the other way.
+      if (banked.current !== 0 && Math.sign(e.deltaY) !== Math.sign(banked.current)) {
+        banked.current = 0;
+      }
+      banked.current += e.deltaY;
+      if (Math.abs(banked.current) < ZOOM_STEP_DELTA) return;
+      const direction = banked.current < 0 ? 1 : -1;
+      banked.current = 0;
+
+      const next = Math.max(0, Math.min(MAX_ZOOM, store.zoom + direction));
       if (next === store.zoom) return;
       const anchorS = win.startS + frac * span;
       store.setZoom(next);
