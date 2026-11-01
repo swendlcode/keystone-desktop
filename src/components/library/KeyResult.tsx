@@ -37,14 +37,17 @@ interface KeyResultProps {
  * show a solid block, so the uncertain rows read as unfinished rather than as
  * uncertain.
  *
- * Uncertainty is carried by the shape instead:
+ * Mode ambiguity — which is most of the residual error — draws *both*
+ * candidates as two filled halves of one chip. Two swatches is a plainer
+ * statement than one swatch and a slash, and it is the only uncertainty the
+ * cell shows at a glance.
  *
- * - Mode ambiguous, which is most of the residual error, draws *both*
- *   candidates as two filled halves of one chip. Two swatches is a plainer
- *   statement than one swatch and a slash.
- * - Low confidence on a single candidate keeps its swatch and adds a dimmed
- *   `?` inside the chip, where it reads as a hedge on that key rather than as
- *   a question about the notation.
+ * Low confidence on a single candidate carries no mark. It had a dimmed `?`
+ * inside the chip and that is gone by request: a punctuation mark in a column
+ * of keys reads as part of the value. The engine's doubt survives only in the
+ * tooltip now, so a confident-looking letter can be wrong with nothing on
+ * screen saying so — worth knowing, because mode is where key detection
+ * fails and this is the cell a DJ trusts.
  */
 export function KeyResult({ track, notation, pad }: KeyResultProps) {
   if (!track.camelot) return <PendingValue track={track} />;
@@ -69,13 +72,15 @@ export function KeyResult({ track, notation, pad }: KeyResultProps) {
     return <KeyBadge camelot={track.camelot} notation={notation} pad={pad} />;
   }
 
-  const style = camelotSwatchStyle(track.camelot);
-
+  // Low confidence, single candidate. The chip is the same filled swatch as
+  // a confident one; only the tooltip says the engine was unsure.
   return (
-    <span className="badge tnum !gap-0.5" style={style ?? undefined} title="Low confidence">
-      {displayKey(track.camelot, { notation, pad })}
-      <span className="opacity-60">?</span>
-    </span>
+    <KeyBadge
+      camelot={track.camelot}
+      notation={notation}
+      pad={pad}
+      title="Low confidence"
+    />
   );
 }
 

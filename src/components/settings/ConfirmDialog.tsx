@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '../ui/Button';
 
@@ -23,6 +23,14 @@ interface ConfirmDialogProps {
  * stray click, and the one thing worse than an extra Escape press is an
  * accidental rewrite of a library.
  *
+ * Enter confirms and Escape cancels. The confirm button takes focus when the
+ * dialog opens, so Enter is the native activation of a focused control with a
+ * visible ring on it rather than an invisible global shortcut — which matters
+ * for a dialog whose default action is usually destructive. The key handler
+ * is only a backstop for when focus has moved elsewhere in the dialog, and it
+ * stands down when the button already has it so a single press cannot fire
+ * twice.
+ *
  * Belongs in `components/ui/` — it is imported from tags, settings and the
  * context menu — but that directory is owned elsewhere, so it lives here with
  * the panes that need it most.
@@ -37,13 +45,26 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const confirmRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) onCancel();
+      if (busy) return;
+      if (e.key === 'Escape') {
+        onCancel();
+        return;
+      }
+      if (e.key === 'Enter') {
+        // The focused button handles its own Enter; stepping in as well
+        // would run the action twice.
+        if (document.activeElement === confirmRef.current) return;
+        e.preventDefault();
+        onConfirm();
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [busy, onCancel]);
+  }, [busy, onCancel, onConfirm]);
 
   return createPortal(
     <div
@@ -60,10 +81,13 @@ export function ConfirmDialog({
             {cancelLabel}
           </Button>
           <Button
+            ref={confirmRef}
+            autoFocus
             variant={destructive ? 'danger' : 'primary'}
             size="sm"
             disabled={busy}
             onClick={onConfirm}
+            className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-keystone-lime"
           >
             {busy ? 'Working...' : confirmLabel}
           </Button>
