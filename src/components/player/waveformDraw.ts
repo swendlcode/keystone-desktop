@@ -116,6 +116,26 @@ const HEADROOM = 0.88;
  */
 const GHOST_RADIUS_PX = 7;
 
+interface Envelope {
+  tops: Float32Array;
+  bottoms: Float32Array;
+  ghostTops: Float32Array;
+  ghostBottoms: Float32Array;
+}
+
+/**
+ * The last envelope measured, keyed by everything it depends on.
+ *
+ * The shape is a function of the file, the window and the canvas size — and
+ * emphatically NOT of the playhead. Now that the playhead advances once per
+ * frame rather than four times a second, measuring it again every frame
+ * would mean a sliding max over a few thousand columns sixty times a second
+ * to produce an identical answer. One slot is enough: there is one waveform
+ * on screen.
+ */
+let cachedKey = '';
+let cachedEnvelope: Envelope | null = null;
+
 /** Repaints the whole canvas. There is no partial-invalidation path. */
 export function drawWaveform(
   ctx: CanvasRenderingContext2D,
@@ -130,16 +150,56 @@ export function drawWaveform(
 
   const mid = height / 2;
   const spanS = Math.max(window.endS - window.startS, 1e-6);
+
+  const key = `${wave.contentHash}|${window.startS}|${window.endS}|${width}|${height}`;
+  if (key !== cachedKey || !cachedEnvelope) {
+    cachedEnvelope = measureEnvelope(wave, level, window, width, mid);
+    cachedKey = key;
+  }
+  const { tops, bottoms, ghostTops, ghostBottoms } = cachedEnvelope;
+
+  // Clipped rather than decided per column, so the split lands on the exact
+  // playhead instead of snapping to a pixel boundary.
+  const playedPx = Math.min(Math.max(((playheadS - window.startS) / spanS) * width, 0), width);
+
+  // Ghost behind, detail in front. The ghost is a max over a window, so it
+  // bridges the gaps between kicks and draws the arrangement — the shape that
+  // tells you where the breakdown is from across the room. The sharp layer
+  // on top keeps every transient its own spike, which is what the ghost
+  // would otherwise smear away.
+  const layers = (ghostColor: string, detailColor: string) => {
+    paintEnvelope(ctx, ghostTops, ghostBottoms, width, ghostColor);
+    paintEnvelope(ctx, tops, bottoms, width, detailColor);
+  };
+
+  layers(opts.unplayedGhostColor, opts.unplayedColor);
+
+  if (playedPx > 0) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, playedPx, height);
+    ctx.clip();
+    layers(opts.playedGhostColor, opts.playedColor);
+    ctx.restore();
+  }
+
+  ctx.fillStyle = opts.centreColor;
+  ctx.fillRect(0, Math.round(mid), width, 1);
+}
+
+/** Measures the four edge arrays. Independent of the playhead. */
+function measureEnvelope(
+  wave: Waveform,
+  level: WaveformLevel,
+  window: WaveWindow,
+  width: number,
+  mid: number,
+): Envelope {
+  const spanS = Math.max(window.endS - window.startS, 1e-6);
   const bucketsPerSecond = wave.sampleRate / level.samplesPerBucket;
 
-  // The envelope is measured once and painted twice, so the played and
-  // unplayed halves are the same shape rather than two shapes that have to
-  // agree at the seam.
-  // Signed amplitudes first, so the ghost can be derived from them rather
-  // than measured a second time.
   const hi = new Float32Array(width);
   const lo = new Float32Array(width);
-
   for (let x = 0; x < width; x += 1) {
     const t0 = window.startS + (x / width) * spanS;
     const t1 = window.startS + ((x + 1) / width) * spanS;
@@ -170,33 +230,7 @@ export function drawWaveform(
     ghostBottoms[x] = mid - ghostLo[x] * scale;
   }
 
-  // Clipped rather than decided per column, so the split lands on the exact
-  // playhead instead of snapping to a pixel boundary.
-  const playedPx = Math.min(Math.max(((playheadS - window.startS) / spanS) * width, 0), width);
-
-  // Ghost behind, detail in front. The ghost is a max over a window, so it
-  // bridges the gaps between kicks and draws the arrangement — the shape that
-  // tells you where the breakdown is from across the room. The sharp layer
-  // on top keeps every transient its own spike, which is what the ghost
-  // would otherwise smear away.
-  const layers = (ghostColor: string, detailColor: string) => {
-    paintEnvelope(ctx, ghostTops, ghostBottoms, width, ghostColor);
-    paintEnvelope(ctx, tops, bottoms, width, detailColor);
-  };
-
-  layers(opts.unplayedGhostColor, opts.unplayedColor);
-
-  if (playedPx > 0) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, playedPx, height);
-    ctx.clip();
-    layers(opts.playedGhostColor, opts.playedColor);
-    ctx.restore();
-  }
-
-  ctx.fillStyle = opts.centreColor;
-  ctx.fillRect(0, Math.round(mid), width, 1);
+  return { tops, bottoms, ghostTops, ghostBottoms };
 }
 
 /**

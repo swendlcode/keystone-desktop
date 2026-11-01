@@ -1,4 +1,4 @@
-import { Play } from '../ui/icons';
+import { Play, Stop } from '../ui/icons';
 import { usePlayerStore } from '../../stores/playerStore';
 import type { CuePoint } from '../../types';
 import { formatTime } from '../../utils/formatters';
@@ -34,6 +34,9 @@ export function CueRegions({
   hoverFrac,
   onSeek,
 }: CueRegionsProps) {
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const currentTime = usePlayerStore((s) => s.currentTime);
+
   if (hoverFrac == null || cues.length === 0) return null;
 
   const spanS = Math.max(win.endS - win.startS, 1e-6);
@@ -62,7 +65,17 @@ export function CueRegions({
 
   const centre = (Math.max(left, 0) + Math.min(right, 1)) / 2;
 
-  const playSection = () => {
+  // Playing *this* section — the transport is running and the playhead is
+  // inside these bounds. A section elsewhere still offers play, because
+  // pressing it means "go there", not "stop that".
+  const playingHere =
+    isPlaying && currentTime >= startS && currentTime < endS;
+
+  const toggleSection = () => {
+    if (playingHere) {
+      usePlayerStore.getState().pause();
+      return;
+    }
     onSeek(startS);
     usePlayerStore.getState().resume();
   };
@@ -80,13 +93,27 @@ export function CueRegions({
       <button
         type="button"
         onPointerDown={(e) => e.stopPropagation()}
-        onClick={playSection}
-        title={`Play from ${formatTime(startS)}`}
-        aria-label={`Play the section starting at ${formatTime(startS)}`}
+        onClick={toggleSection}
+        title={
+          playingHere ? 'Stop' : `Play from ${formatTime(startS)}`
+        }
+        aria-label={
+          playingHere
+            ? 'Stop'
+            : `Play the section starting at ${formatTime(startS)}`
+        }
         style={{ left: `${centre * 100}%` }}
-        className="absolute top-1/2 z-20 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-gray-900/85 text-keystone-white shadow-lg ring-1 ring-gray-600 transition-colors hover:bg-keystone-lime hover:text-[color:var(--color-on-accent)]"
+        className={`absolute top-1/2 z-20 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full shadow-lg ring-1 transition-colors ${
+          playingHere
+            ? 'bg-keystone-lime text-[color:var(--color-on-accent)] ring-keystone-lime'
+            : 'bg-gray-900/85 text-keystone-white ring-gray-600 hover:bg-keystone-lime hover:text-[color:var(--color-on-accent)]'
+        }`}
       >
-        <Play size={13} color="currentColor" variant="Linear" />
+        {playingHere ? (
+          <Stop size={12} color="currentColor" variant="Linear" />
+        ) : (
+          <Play size={13} color="currentColor" variant="Linear" />
+        )}
       </button>
     </>
   );

@@ -169,10 +169,22 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
       <canvas ref={canvasRef} className="block h-full w-full" />
       {!wave && <WavePlaceholder track={track} />}
       {playheadFrac >= 0 && playheadFrac <= 1 && (
+        // Red, and the only red in the player. The playhead was white, which
+        // is also the colour of the loudest part of the waveform it crosses,
+        // so it disappeared into exactly the material you watch it against.
+        //
+        // Positioned with `translate3d` rather than `left` so it moves on the
+        // compositor: this now updates every frame, and animating `left`
+        // relayouts the strip sixty times a second.
         <span
-          style={{ left: `${playheadFrac * 100}%` }}
-          className="pointer-events-none absolute inset-y-0 w-px bg-keystone-white"
-        />
+          style={{ transform: `translate3d(${playheadFrac * size.width}px, 0, 0)` }}
+          className="pointer-events-none absolute inset-y-0 left-0 z-30 w-px bg-red-500 will-change-transform"
+        >
+          {/* The head. A line alone is hard to grab visually when the
+              waveform behind it is dense; the marker is what the eye
+              tracks. */}
+          <span className="absolute -top-px left-1/2 h-0 w-0 -translate-x-1/2 border-x-[5px] border-t-[7px] border-x-transparent border-t-red-500" />
+        </span>
       )}
       <CueRegions
         cues={visibleCues}

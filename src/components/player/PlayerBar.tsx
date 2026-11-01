@@ -60,18 +60,22 @@ export function PlayerBar() {
         </div>
       </div>
 
-      {/* `flex-wrap`: on a narrow window the readout drops to its own line
-          instead of squeezing the title into an ellipsis after four words.
-          The title is the one thing here that cannot be guessed from a
-          fragment. */}
-      <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2">
-        <span className="min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wide text-keystone-white">
-          {track ? trackLabel(track) : 'No track'}
-        </span>
-        {track && (
+      {/* Two rows, always. The title shared a line with the readout and lost
+          every time — the readout is a fixed set of controls that cannot
+          shrink, so the title absorbed the whole shortfall and became an
+          ellipsis after four words. A track's name is the one thing on this
+          bar that cannot be guessed from a fragment, and an artist, a title,
+          a mix name and a label do not fit in what is left over beside six
+          controls. It gets the row. */}
+      <span className="block w-full text-sm font-semibold uppercase tracking-wide text-keystone-white">
+        {track ? trackLabel(track) : 'No track'}
+      </span>
+
+      {track && (
+        <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2">
           <TrackReadout track={track} settings={settings} onSeek={seek} />
-        )}
-      </div>
+        </div>
+      )}
 
       {pianoOpen && track && (
         <div className="border-t border-gray-700">

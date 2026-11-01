@@ -100,6 +100,30 @@ export function usePlayer() {
     };
   }, [setCurrentTime, setDuration, playNext]);
 
+  /**
+   * Drive the playhead from the frame clock, not from `timeupdate`.
+   *
+   * `timeupdate` fires about four times a second, which is what made the
+   * playhead and the played/unplayed split advance in visible steps — a
+   * quarter of a second is 15 frames of standing still. The element's
+   * `currentTime` is accurate whenever it is read, so reading it once per
+   * frame costs nothing extra and the line moves continuously.
+   *
+   * Only while playing. Paused, `timeupdate` and the seek handler still
+   * cover every way the position can change.
+   */
+  useEffect(() => {
+    if (!isPlaying) return;
+    let frame = 0;
+    const tick = () => {
+      const el = audioRef.current;
+      if (el && !el.paused) setCurrentTime(el.currentTime);
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [isPlaying, setCurrentTime]);
+
   const seek = useCallback((time: number) => {
     const el = audioRef.current;
     if (!el) return;
