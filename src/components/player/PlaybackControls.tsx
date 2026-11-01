@@ -71,7 +71,7 @@ export function PlaybackControls({ totalS }: { totalS: number }) {
         <IconButton label="Zoom out" onClick={zoomOut} disabled={zoom === 0}>
           <SearchZoomOut size={14} color="currentColor" variant="Linear" />
         </IconButton>
-        <span className="mono tnum w-6 text-center text-[11px] text-gray-500">
+        <span className="mono tnum w-10 text-center text-[12px] text-gray-500">
           {2 ** zoom}x
         </span>
         <IconButton

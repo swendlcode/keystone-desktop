@@ -91,7 +91,7 @@ export function UpdateTagsPane({ settings }: { settings: Settings }) {
           options={PLACEMENT}
           onChange={(tagWritePlacement) => write({ tagWritePlacement })}
         />
-        <p className="mono mt-1 text-[11px] text-keystone-lime">{preview(settings)}</p>
+        <p className="mono mt-1 text-[12px] text-keystone-lime">{preview(settings)}</p>
       </SettingGroup>
 
       <AlsoGroup settings={settings} off={off} write={write} />

@@ -23,13 +23,13 @@ export function RenamePreview({ plan }: { plan: RenamePlan }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="mono text-[11px] text-keystone-white">
+      <p className="mono text-[12px] text-keystone-white">
         {willRename.length} renamed, {skipped.length} left alone
       </p>
 
       <ul className="flex flex-col gap-1">
         {willRename.slice(0, SHOWN).map((i) => (
-          <li key={i.trackId} className="mono flex items-center gap-2 text-[11px]">
+          <li key={i.trackId} className="mono flex items-center gap-2 text-[12px]">
             <span className="min-w-0 flex-1 truncate text-gray-500" title={i.fromPath}>
               {baseName(i.fromPath)}
             </span>
@@ -46,7 +46,7 @@ export function RenamePreview({ plan }: { plan: RenamePlan }) {
       )}
 
       {skipped.slice(0, 3).map((i) => (
-        <p key={i.trackId} className="mono truncate text-[11px] text-amber-400">
+        <p key={i.trackId} className="mono truncate text-[12px] text-amber-400">
           {baseName(i.fromPath)}: {i.skipped}
         </p>
       ))}

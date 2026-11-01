@@ -98,7 +98,7 @@ function BpmField({
         max={300}
         disabled={disabled}
         value={String(value)}
-        trailing={<span className="mono text-[11px] text-gray-500">BPM</span>}
+        trailing={<span className="mono text-[12px] text-gray-500">BPM</span>}
         onChange={(e) => onType(Number(e.target.value))}
         onBlur={(e) => onCommit(Number(e.target.value))}
         onKeyDown={(e) => {

@@ -58,7 +58,7 @@ export function RadioGroup<T extends string>({
               {opt.label}
             </span>
             {opt.hint && (
-              <span className="mono mt-0.5 block text-[11px] text-gray-500">
+              <span className="mono mt-0.5 block text-[12px] text-gray-500">
                 {opt.hint}
               </span>
             )}

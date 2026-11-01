@@ -5,6 +5,7 @@ import { keystoneService } from '../services/keystoneService';
 import { useLibraryStore } from '../stores/libraryStore';
 import {
   KeystoneEvent,
+  type KeyMode,
   type ScanProgressEvent,
   type TrackPage,
   type TrackQuery,
@@ -125,6 +126,36 @@ export function useSetRating() {
     onSuccess: (track) => {
       qc.setQueryData(trackKeys.byId(track.id), track);
       patchTrackInPages(qc, track);
+    },
+  });
+}
+
+/**
+ * Override the detected key by hand.
+ *
+ * The command has existed since the backend was written and nothing called
+ * it, so a wrong letter was unfixable from inside the app. The backend stamps
+ * `keySource: 'user'`, which is what stops a later re-analysis quietly undoing
+ * the correction.
+ */
+export function useSetTrackKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      keyRoot,
+      keyMode,
+    }: {
+      id: string;
+      keyRoot: number;
+      keyMode: KeyMode;
+    }) => keystoneService.setTrackKey(id, keyRoot, keyMode),
+    onSuccess: (track) => {
+      qc.setQueryData(trackKeys.byId(track.id), track);
+      patchTrackInPages(qc, track);
+      // The wheel's per-segment counts move with it. Keyed by the filters it
+      // was built for, so invalidate the prefix rather than one entry.
+      qc.invalidateQueries({ queryKey: [...trackKeys.all, 'wheel'] });
     },
   });
 }

@@ -24,6 +24,10 @@ macro_rules! keystone_invoke_handler {
             $crate::commands::library_commands::run_reconciliation,
             $crate::commands::library_commands::clean_cache,
             $crate::commands::library_commands::get_library_folders,
+
+            $crate::commands::import_commands::get_music_library,
+            $crate::commands::import_commands::import_music_playlists,
+            $crate::commands::import_commands::import_playlist_file,
             // tracks
             $crate::commands::track_commands::search_tracks,
             $crate::commands::track_commands::get_track,

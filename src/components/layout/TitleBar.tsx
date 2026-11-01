@@ -1,9 +1,7 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { MouseEvent } from 'react';
-import { HamburgerMenu, Moon, SearchNormal, Setting2, Sun1, Tag } from '../ui/icons';
-import { Input } from '../ui/Input';
+import { Moon, Setting2, Sun1, Tag } from '../ui/icons';
 import { useUiStore, type ActiveView } from '../../stores/uiStore';
-import { useLibraryStore } from '../../stores/libraryStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 const TABS: Array<{ id: ActiveView; label: string }> = [
@@ -12,7 +10,18 @@ const TABS: Array<{ id: ActiveView; label: string }> = [
 ];
 
 /**
- * The window chrome: mark, view tabs, search, theme and settings.
+ * The window chrome: view tabs, theme and settings.
+ *
+ * Deliberately thin. It used to carry a search field as well, which put two
+ * search boxes on screen at once — this one and the view's own, in the library
+ * toolbar and in the tags toolbar — writing the same `filters.query`. Two
+ * fields for one value is a bug whichever one you type in: the other shows
+ * something stale, and neither reads as the one that matters. The view's own
+ * field wins because it sits with the result count and the filter chips it
+ * narrows, and because it is the one that debounces.
+ *
+ * The sidebar toggle is gone from here too; the sidebar's own edge handle
+ * drags it narrower, shut and open again, which is where a hand already is.
  *
  * The drag layer is a sibling under the controls rather than the bar itself.
  * Putting `data-tauri-drag-region` on a container swallows clicks on anything
@@ -21,9 +30,6 @@ const TABS: Array<{ id: ActiveView; label: string }> = [
 export function TitleBar() {
   const view = useUiStore((s) => s.view);
   const setView = useUiStore((s) => s.setView);
-  const toggleSidebar = useUiStore((s) => s.toggleSidebar);
-  const query = useLibraryStore((s) => s.filters.query);
-  const setQuery = useLibraryStore((s) => s.setQuery);
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
 
@@ -51,17 +57,6 @@ export function TitleBar() {
         className="absolute inset-0 z-0 cursor-default"
       />
 
-      <div className="z-10 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          aria-label="Toggle sidebar"
-          className="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-800 hover:text-keystone-white"
-        >
-          <HamburgerMenu size={18} color="currentColor" variant="Linear" />
-        </button>
-      </div>
-
       <nav className="z-10 flex items-center gap-1">
         {TABS.map((tab) => (
           <button
@@ -82,20 +77,7 @@ export function TitleBar() {
         ))}
       </nav>
 
-      <div className="z-10 ml-auto flex w-full max-w-sm items-center">
-        <Input
-          id="global-search"
-          value={query}
-          placeholder="Search"
-          onChange={(e) => setQuery(e.target.value)}
-          leading={
-            <SearchNormal size={14} color="currentColor" variant="Linear" className="text-gray-400" />
-          }
-          className="w-full"
-        />
-      </div>
-
-      <div className="z-10 flex items-center gap-1">
+      <div className="z-10 ml-auto flex items-center gap-1">
         <button
           type="button"
           onClick={toggleTheme}

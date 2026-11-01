@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Keyboard } from '../ui/icons';
 import { CueStepper } from './CueStepper';
-import { KeyResult } from '../library/KeyResult';
+import { KeyPicker } from './KeyPicker';
 import { EnergyValue, TempoValue } from '../library/TrackValues';
 import { useUiStore } from '../../stores/uiStore';
 import type { Settings, Track } from '../../types';
@@ -27,7 +27,7 @@ export function TrackReadout({ track, settings, onSeek }: TrackReadoutProps) {
   return (
     <span className="flex shrink-0 items-center gap-4">
       <Readout label="Key">
-        <KeyResult
+        <KeyPicker
           track={track}
           notation={settings?.keyNotation ?? 'camelot'}
           pad={settings?.padCamelotNumbers ?? false}

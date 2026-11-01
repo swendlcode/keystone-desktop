@@ -48,6 +48,17 @@ export default {
         sans: ['Syne', 'system-ui', 'sans-serif'],
         mono: ['"DM Mono"', 'ui-monospace', 'monospace'],
       },
+      // One step up from Tailwind's defaults (12/14/16). Syne runs small for
+      // its point size and this table is read at arm's length over a mixer, so
+      // the stock scale was legible rather than comfortable. Overridden here
+      // rather than at each call site so the whole app moves together; the
+      // explicit `text-[Npx]` values in the settings panes were raised by the
+      // same single step.
+      fontSize: {
+        xs: ['13px', '1.45'],
+        sm: ['15px', '1.45'],
+        base: ['17px', '1.5'],
+      },
     },
   },
   plugins: [],

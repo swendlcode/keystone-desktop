@@ -14,6 +14,7 @@ import type {
   ExportTarget,
   KeyMode,
   LibraryFolder,
+  MusicLibraryInfo,
   ReconcileReport,
   RenamePlan,
   RenameReport,
@@ -86,6 +87,24 @@ export const keystoneService = {
       Returns the number of loose files queued, not counting folder contents. */
   addDroppedPaths(paths: string[]): Promise<number> {
     return invoke('add_dropped_paths', { paths });
+  },
+
+  /**
+   * What the Music app is publishing, and the playlists inside it.
+   *
+   * `path` reads an exported library XML instead of the default location.
+   */
+  getMusicLibrary(path: string | null = null): Promise<MusicLibraryInfo> {
+    return invoke('get_music_library', { path });
+  },
+
+  importMusicPlaylists(xmlPath: string, names: string[]): Promise<number> {
+    return invoke('import_music_playlists', { xmlPath, names });
+  },
+
+  /** An `.m3u`, `.m3u8` or `.pls` file. */
+  importPlaylistFile(path: string): Promise<number> {
+    return invoke('import_playlist_file', { path });
   },
 
   cancelScan(): Promise<void> {

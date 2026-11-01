@@ -15,21 +15,34 @@ export interface WaveWindow {
   endS: number;
 }
 
+/** How many seconds fit across the canvas at a zoom step. */
+export function waveSpan(durationS: number, zoom: number): number {
+  if (!(durationS > 0)) return 1;
+  return Math.min(durationS, durationS / 2 ** Math.max(0, zoom));
+}
+
 /**
- * The visible span at a zoom step, centred on the playhead and clamped.
+ * The visible span at a zoom step, and where it sits.
  *
- * Zoom 0 is the whole track, and each step halves the span. Clamping is done
- * by sliding the window rather than by truncating it, so zooming in near the
- * end of a track still fills the canvas instead of leaving dead space.
+ * Zoom 0 is the whole track and each step halves the span. Clamping slides the
+ * window rather than truncating it, so zooming in near the end of a track
+ * still fills the canvas instead of leaving dead space.
+ *
+ * `centreS` is where the user has scrolled to; null means follow the playhead.
+ * The two are separate because placing a cue accurately means looking at a bar
+ * that is not the one playing — with the window pinned to the playhead the
+ * only way to see another part of the track was to seek to it, which moves the
+ * thing you were lining the cue up against.
  */
 export function waveWindow(
   durationS: number,
   zoom: number,
   playheadS: number,
+  centreS: number | null = null,
 ): WaveWindow {
   if (!(durationS > 0)) return { startS: 0, endS: 1 };
-  const span = Math.min(durationS, durationS / 2 ** Math.max(0, zoom));
-  let startS = playheadS - span / 2;
+  const span = waveSpan(durationS, zoom);
+  let startS = (centreS ?? playheadS) - span / 2;
   if (startS < 0) startS = 0;
   if (startS + span > durationS) startS = durationS - span;
   return { startS, endS: startS + span };

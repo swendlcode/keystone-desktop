@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { TitleBar } from './components/layout/TitleBar';
 import { Sidebar } from './components/layout/Sidebar';
+import { SidebarResizer } from './components/layout/SidebarResizer';
 import { MainPanel } from './components/layout/MainPanel';
 import { StatusBar } from './components/layout/StatusBar';
 import { DropOverlay } from './components/layout/DropOverlay';
@@ -36,6 +37,7 @@ export default function App() {
       <TitleBar />
       <div className="flex min-h-0 flex-1">
         <Sidebar />
+        <SidebarResizer />
         <MainPanel>
           <PlayerBar />
           <Suspense fallback={<div className="flex-1" />}>

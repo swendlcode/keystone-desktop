@@ -67,9 +67,39 @@ export function LibraryToolbar({ total }: { total: number }) {
         <span className="mono tnum label shrink-0">
           {formatCount(total)} tracks
         </span>
+        <SelectionCount />
         <FilterChips />
       </div>
     </div>
+  );
+}
+
+/**
+ * How many rows are selected, and a way out of the selection.
+ *
+ * Shown from two upwards. Bulk actions — filing into a collection, a tag
+ * write, a re-analysis — all act on this set, and the only evidence of its
+ * size used to be counting highlighted rows, which is not possible at all once
+ * the selection runs past the bottom of the window. Cmd+A and shift-click
+ * select the rows the table is holding rather than every row that matches, so
+ * the number is also the honest answer to what a bulk action is about to
+ * touch.
+ */
+function SelectionCount() {
+  const count = useLibraryStore((s) => s.selectedIds.size);
+  const clearSelection = useLibraryStore((s) => s.clearSelection);
+  if (count < 2) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={clearSelection}
+      title="Clear the selection (Esc)"
+      className="badge shrink-0 bg-keystone-lime/15 text-keystone-lime transition-colors hover:bg-keystone-lime/25"
+    >
+      {formatCount(count)} selected
+      <CloseCircle size={11} color="currentColor" variant="Linear" />
+    </button>
   );
 }
 

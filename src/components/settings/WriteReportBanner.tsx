@@ -39,13 +39,13 @@ export function WriteReportBanner({
       </span>
 
       <div className="min-w-0 flex-1">
-        <p className="mono text-[11px] text-keystone-white">
+        <p className="mono text-[12px] text-keystone-white">
           {undone != null
             ? `${undone} restored`
             : `${report.written} written, ${report.skipped} unchanged, ${report.failed} failed`}
         </p>
         {report.failures.slice(0, 3).map((f) => (
-          <p key={f.trackId} className="mono mt-0.5 truncate text-[11px] text-amber-400">
+          <p key={f.trackId} className="mono mt-0.5 truncate text-[12px] text-amber-400">
             {f.path}: {f.reason}
           </p>
         ))}

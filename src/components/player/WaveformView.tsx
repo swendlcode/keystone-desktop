@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CueMarkers } from './CueMarkers';
-import { drawWaveform, waveColors, waveWindow } from './waveformDraw';
+import { drawWaveform, waveColors, waveSpan, waveWindow } from './waveformDraw';
 import { useWaveform } from '../../hooks/useAnalysis';
 import { useCuePoints } from '../../hooks/useCues';
 import { useEffectiveSettings } from '../../hooks/useSettings';
-import { usePlayerStore } from '../../stores/playerStore';
+import { MAX_ZOOM, usePlayerStore } from '../../stores/playerStore';
 import type { Track } from '../../types';
 
 interface WaveformViewProps {
@@ -33,10 +33,23 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
   const currentTime = usePlayerStore((s) => s.currentTime);
   const storeDuration = usePlayerStore((s) => s.duration);
   const zoom = usePlayerStore((s) => s.zoom);
+  const viewCentreS = usePlayerStore((s) => s.viewCentreS);
 
   const durationS =
     storeDuration || (wave?.durationMs ?? track.durationMs ?? 0) / 1000;
-  const win = waveWindow(durationS, zoom, currentTime);
+  const win = waveWindow(durationS, zoom, currentTime, viewCentreS);
+
+  useWaveformWheel(boxRef, durationS);
+
+  // A manual pan holds until it stops being useful. Once playback has run out
+  // of the window the user scrolled to, following the playhead is what they
+  // want again — and the alternative, a view that never comes back on its own,
+  // looks like the waveform has frozen.
+  useEffect(() => {
+    if (viewCentreS == null) return;
+    if (currentTime >= win.startS && currentTime <= win.endS) return;
+    usePlayerStore.getState().setViewCentre(null);
+  }, [currentTime, viewCentreS, win.startS, win.endS]);
 
   useLayoutEffect(() => {
     const box = boxRef.current;
@@ -97,6 +110,11 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
       ref={boxRef}
       style={{ height: HEIGHT }}
       onPointerDown={(e) => seekFromClientX(e.clientX)}
+      title={
+        zoom > 0
+          ? 'Scroll to pan · \u2318 scroll to zoom'
+          : '\u2318 scroll to zoom in'
+      }
       className="relative w-full cursor-col-resize overflow-hidden rounded-md bg-gray-800"
     >
       <canvas ref={canvasRef} className="block h-full w-full" />
@@ -115,6 +133,76 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
       />
     </div>
   );
+}
+
+/**
+ * Scroll to pan, Cmd / Ctrl scroll to zoom about the pointer.
+ *
+ * A native listener rather than React's `onWheel`, because React registers
+ * wheel handlers passively and a passive handler cannot call
+ * `preventDefault()` — without which Cmd-scroll is the webview's page zoom and
+ * the whole window scales instead of the waveform.
+ *
+ * Zoom is anchored on the pointer, not on the centre: the second under the
+ * cursor stays under the cursor. That is what makes it usable for placing a
+ * cue, because the thing you are zooming towards is the thing you are
+ * pointing at.
+ */
+function useWaveformWheel(
+  boxRef: React.RefObject<HTMLDivElement>,
+  durationS: number,
+) {
+  const durationRef = useRef(durationS);
+  durationRef.current = durationS;
+
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+
+    const onWheel = (e: WheelEvent) => {
+      const total = durationRef.current;
+      if (!(total > 0)) return;
+      const rect = box.getBoundingClientRect();
+      if (rect.width === 0) return;
+
+      const store = usePlayerStore.getState();
+      const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+      const win = waveWindow(total, store.zoom, store.currentTime, store.viewCentreS);
+      const span = win.endS - win.startS;
+
+      if (e.metaKey || e.ctrlKey) {
+        e.preventDefault();
+        const next = Math.max(
+          0,
+          Math.min(MAX_ZOOM, store.zoom + (e.deltaY < 0 ? 1 : -1)),
+        );
+        if (next === store.zoom) return;
+        const anchorS = win.startS + frac * span;
+        store.setZoom(next);
+        // Zoom 0 is the whole track, so there is nothing left to pan and the
+        // centre goes back to following the playhead.
+        store.setViewCentre(
+          next === 0 ? null : anchorS + (0.5 - frac) * waveSpan(total, next),
+        );
+        return;
+      }
+
+      // Nothing to pan to at zoom 0, and swallowing the event there would eat
+      // a scroll the user meant for the list below.
+      if (store.zoom === 0) return;
+      e.preventDefault();
+      // Trackpads send a two-axis delta; a mouse wheel only sends deltaY. Take
+      // whichever axis the gesture actually moved on.
+      const delta =
+        Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      store.setViewCentre(
+        (win.startS + win.endS) / 2 + (delta / rect.width) * span,
+      );
+    };
+
+    box.addEventListener('wheel', onWheel, { passive: false });
+    return () => box.removeEventListener('wheel', onWheel);
+  }, [boxRef]);
 }
 
 /**

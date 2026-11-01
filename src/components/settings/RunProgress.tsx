@@ -16,7 +16,7 @@ export function RunProgress({ progress }: { progress: FileProgressEvent | null }
   return (
     <div className="mt-2 flex flex-col gap-1">
       <ProgressBar value={done / total} />
-      <p className="mono text-[11px] text-gray-500">
+      <p className="mono text-[12px] text-gray-500">
         {done} of {total}
         {failed > 0 && `, ${failed} failed`}
       </p>

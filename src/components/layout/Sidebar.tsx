@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { FolderAdd } from '../ui/icons';
 import { Button } from '../ui/Button';
 import { CollectionsPanel } from '../collections/CollectionsPanel';
+import { AddTracksDialog } from '../import/AddTracksDialog';
+import { MusicImportDialog } from '../import/MusicImportDialog';
 import { CamelotWheelSlot } from '../library/CamelotWheelSlot';
 import { useUiStore } from '../../stores/uiStore';
 import { useAddFolder } from '../../hooks/useLibrary';
@@ -17,10 +20,14 @@ export function Sidebar() {
   const open_ = useUiStore((s) => s.sidebarOpen);
   const width = useUiStore((s) => s.sidebarWidth);
   const addFolder = useAddFolder();
+  // 'choose' is the two-way fork; 'playlist' is the Music import. Held here
+  // rather than in `uiStore` because nothing outside this column opens them.
+  const [dialog, setDialog] = useState<null | 'choose' | 'playlist'>(null);
 
   if (!open_) return null;
 
   const pickFolder = async () => {
+    setDialog(null);
     const picked = await open({ directory: true, multiple: false });
     if (typeof picked === 'string') addFolder.mutate(picked);
   };
@@ -37,7 +44,7 @@ export function Sidebar() {
           variant="primary"
           size="sm"
           className="w-full"
-          onClick={pickFolder}
+          onClick={() => setDialog('choose')}
           disabled={addFolder.isPending}
           icon={<FolderAdd size={14} color="currentColor" variant="Linear" />}
         >
@@ -45,9 +52,18 @@ export function Sidebar() {
         </Button>
       </div>
 
-      {/* The queue row and the collections together: the panel owns their order
-          because the queue must stay visible while the list scrolls under it. */}
       <CollectionsPanel />
+
+      {dialog === 'choose' && (
+        <AddTracksDialog
+          onFolder={() => void pickFolder()}
+          onPlaylist={() => setDialog('playlist')}
+          onCancel={() => setDialog(null)}
+        />
+      )}
+      {dialog === 'playlist' && (
+        <MusicImportDialog onClose={() => setDialog(null)} />
+      )}
     </aside>
   );
 }

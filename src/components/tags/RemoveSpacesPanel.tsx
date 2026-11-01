@@ -46,10 +46,10 @@ export function RemoveSpacesPanel() {
         </Button>
       </div>
 
-      <p className="text-[11px] text-gray-500">
+      <p className="text-[12px] text-gray-500">
         {ids.length === 0 ? 'Select tracks first.' : `${ids.length} selected.`}
       </p>
-      {run.error && <p className="text-[11px] text-amber-400">{run.error}</p>}
+      {run.error && <p className="text-[12px] text-amber-400">{run.error}</p>}
 
       <TagRunDialogs run={run} trackIds={ids} title="Tidy these files?" verb="Tidy" />
     </div>

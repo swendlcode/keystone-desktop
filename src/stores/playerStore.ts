@@ -30,6 +30,12 @@ interface PlayerStore {
   stopSeq: number;
   /** Zoom index into `Waveform.levels`. The player's - / + buttons. */
   zoom: number;
+  /**
+   * Centre of the visible waveform window, in seconds, or null to follow the
+   * playhead. Written by a scroll across the waveform; cleared when playback
+   * leaves the window, so a manual pan holds until it stops being useful.
+   */
+  viewCentreS: number | null;
   /** Which cue slot the user is dragging, or null. Drives the marker hit test. */
   draggingCueSlot: number | null;
 
@@ -46,6 +52,7 @@ interface PlayerStore {
   setZoom: (zoom: number) => void;
   zoomIn: () => void;
   zoomOut: () => void;
+  setViewCentre: (seconds: number | null) => void;
   setDraggingCueSlot: (slot: number | null) => void;
   clearCurrent: () => void;
 
@@ -54,7 +61,13 @@ interface PlayerStore {
   registerSeek: (fn: (time: number) => void) => void;
 }
 
-const MAX_ZOOM = 4;
+/**
+ * 128x. Four steps were enough to look at a drop and not enough to place a cue
+ * on it: on a five-minute track 16x still puts twenty seconds across the
+ * canvas, which is about 90 ms per pixel. At 128x it is a little over two
+ * seconds, so a cue can be dragged onto a transient rather than near it.
+ */
+const MAX_ZOOM = 7;
 const VOLUME_KEY = 'keystone:volume';
 
 /**
@@ -87,6 +100,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   pendingStartAt: 0,
   stopSeq: 0,
   zoom: 0,
+  viewCentreS: null,
   draggingCueSlot: null,
   seekTo: null,
 
@@ -97,6 +111,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentTime: startAt,
       duration: 0,
       pendingStartAt: startAt,
+      viewCentreS: null,
     }),
 
   /** Hold the playhead. The spacebar and the transport's pause. */
@@ -162,8 +177,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     set({ volume: clamped });
   },
   setZoom: (zoom) => set({ zoom: Math.max(0, Math.min(MAX_ZOOM, zoom)) }),
-  zoomIn: () => set((s) => ({ zoom: Math.min(MAX_ZOOM, s.zoom + 1) })),
-  zoomOut: () => set((s) => ({ zoom: Math.max(0, s.zoom - 1) })),
+  // The buttons re-centre on the playhead. Only a scroll pans, and a user who
+  // reaches for the toolbar after scrolling away has asked to be brought back.
+  zoomIn: () =>
+    set((s) => ({ zoom: Math.min(MAX_ZOOM, s.zoom + 1), viewCentreS: null })),
+  zoomOut: () =>
+    set((s) => ({ zoom: Math.max(0, s.zoom - 1), viewCentreS: null })),
+  setViewCentre: (viewCentreS) => set({ viewCentreS }),
   setDraggingCueSlot: (draggingCueSlot) => set({ draggingCueSlot }),
   clearCurrent: () =>
     set({ currentTrack: null, isPlaying: false, currentTime: 0, duration: 0 }),

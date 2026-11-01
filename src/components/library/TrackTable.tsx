@@ -7,6 +7,7 @@ import { TrackTableHeader } from './TrackTableHeader';
 import { ROW_HEIGHT, gridTemplate, visibleColumns } from './columns';
 import { useRowInteraction } from './useRowInteraction';
 import type { TrackWindow } from './useTrackWindow';
+import { useSelectAll } from '../../hooks/useKeyboard';
 import { PAGE_SIZE, useSetRating } from '../../hooks/useLibrary';
 import { useEffectiveSettings } from '../../hooks/useSettings';
 import { useLibraryStore } from '../../stores/libraryStore';
@@ -36,6 +37,7 @@ export function TrackTable({ window: win, onPageChange }: TrackTableProps) {
   const playingId = usePlayerStore((s) => s.currentTrack?.id ?? null);
 
   const rows = useRowInteraction(win, settings?.playAutomatically ?? false);
+  useSelectAll(useMemo(() => win.loaded.map((t) => t.id), [win.loaded]));
 
   const columns = useMemo(
     () => visibleColumns(settings?.columns),
@@ -108,6 +110,7 @@ export function TrackTable({ window: win, onPageChange }: TrackTableProps) {
                     decimals={settings?.tempoDecimals ?? 0}
                     onRowMouseDown={rows.onRowMouseDown}
                     onRowDoubleClick={rows.onRowDoubleClick}
+                    onRowDragStart={rows.onRowDragStart}
                     onRowContextMenu={rows.onRowContextMenu}
                     onRate={onRate}
                   />

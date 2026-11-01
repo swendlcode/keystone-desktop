@@ -13,10 +13,10 @@ export function AboutPane() {
     <SettingSection title="About">
       <SettingGroup>
         <Logo size={22} />
-        <p className="mono mt-2 text-[11px] text-gray-400">
+        <p className="mono mt-2 text-[12px] text-gray-400">
           Version {version ?? '—'}
         </p>
-        <p className="mono text-[11px] text-gray-500">
+        <p className="mono text-[12px] text-gray-500">
           Tauri 2 · React 18 · Rust · SQLite
         </p>
         <SettingNote>

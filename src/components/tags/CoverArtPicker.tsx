@@ -47,14 +47,14 @@ export function CoverArtPicker({ trackId }: { trackId: string }) {
             <MusicSquare size={28} color="currentColor" variant="Linear" />
           </span>
         )}
-        <span className="absolute inset-0 flex items-center justify-center gap-1.5 bg-black/70 text-[11px] text-keystone-white opacity-0 transition-opacity group-hover/art:opacity-100">
+        <span className="absolute inset-0 flex items-center justify-center gap-1.5 bg-black/70 text-[12px] text-keystone-white opacity-0 transition-opacity group-hover/art:opacity-100">
           <Magicpen size={12} color="currentColor" variant="Linear" />
           Replace
         </span>
       </button>
 
-      {error && <p className="text-[11px] text-amber-400">{error}</p>}
-      {setArt.isPending && <p className="text-[11px] text-gray-500">Writing...</p>}
+      {error && <p className="text-[12px] text-amber-400">{error}</p>}
+      {setArt.isPending && <p className="text-[12px] text-gray-500">Writing...</p>}
 
       <input
         ref={inputRef}

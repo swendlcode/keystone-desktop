@@ -71,7 +71,7 @@ export function Checkbox({
               {label}
             </span>
           )}
-          {hint && <span className="mt-0.5 block text-[11px] text-gray-500">{hint}</span>}
+          {hint && <span className="mt-0.5 block text-[12px] text-gray-500">{hint}</span>}
         </span>
       )}
     </label>

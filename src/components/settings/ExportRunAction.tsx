@@ -142,7 +142,7 @@ function ResultBanner({
       </span>
       <div className="min-w-0 flex-1">
         {results.map(({ target, report }) => (
-          <p key={target} className="mono text-[11px] text-keystone-white">
+          <p key={target} className="mono text-[12px] text-keystone-white">
             {TARGET_LABEL[target]}: {report.written} written, {report.failed} failed
           </p>
         ))}
@@ -159,13 +159,13 @@ function PlanBody({ plans }: { plans: TargetRun[] }) {
     <div className="flex flex-col gap-3">
       {plans.map(({ target, report }) => (
         <div key={target}>
-          <p className="mono text-[11px] text-keystone-white">
+          <p className="mono text-[12px] text-keystone-white">
             {TARGET_LABEL[target]} — {report.cuesToWrite} cues,{' '}
             {report.cuesToOverwrite} replaced, {report.tracksMissing} tracks not in
             its library
           </p>
           {report.manualSteps.length > 0 && (
-            <ol className="mt-1 list-inside list-decimal text-[11px] text-gray-400">
+            <ol className="mt-1 list-inside list-decimal text-[12px] text-gray-400">
               {report.manualSteps.map((s) => (
                 <li key={s}>{s}</li>
               ))}

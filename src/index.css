@@ -165,7 +165,7 @@
     color: var(--color-text);
     font-family: 'Syne', system-ui, sans-serif;
     font-weight: 500;
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     user-select: none;
@@ -216,8 +216,33 @@
     padding: 2px 8px;
     border-radius: 4px;
     font-family: 'DM Mono', ui-monospace, monospace;
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1;
+  }
+
+  /*
+    A key with two candidates: one chip, two filled halves, one per candidate.
+
+    The pair used to be drawn as `3A/3B?` in a single outlined chip, which is
+    the one rendering a DJ cannot read at a glance — the outline made it look
+    unfinished next to the filled swatches around it, and the trailing question
+    mark attached itself to the slash, so the chip asked whether the key was
+    "3A/3B" rather than saying it was one of two. Two filled halves say the
+    same thing with no punctuation: each candidate carries its own swatch from
+    the wheel, which is the colour the user is already matching against.
+  */
+  .badge-split {
+    display: inline-flex;
+    align-items: stretch;
+    overflow: hidden;
+    border-radius: 4px;
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .badge-split > * {
+    padding: 3px 6px;
   }
 
   /* Section labels: SPEC.md writes them uppercase (ADD TRACKS, 412 TRACKS,
@@ -225,7 +250,7 @@
   .label {
     font-family: 'Syne', system-ui, sans-serif;
     font-weight: 600;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--color-text-muted);

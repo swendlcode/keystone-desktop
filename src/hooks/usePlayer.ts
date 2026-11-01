@@ -21,6 +21,8 @@ export function usePlayer() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const stopSeqRef = useRef(0);
   const loadedIdRef = useRef<string | null>(null);
+  /** The track whose `src` is actually assigned, as opposed to in flight. */
+  const readyIdRef = useRef<string | null>(null);
 
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -82,6 +84,7 @@ export function usePlayer() {
 
     let cancelled = false;
     loadedIdRef.current = currentTrack.id;
+    readyIdRef.current = null;
 
     // Both at once: the offset is a database read, and serialising it behind the
     // path read would delay the first frame of audio for no reason.
@@ -91,9 +94,23 @@ export function usePlayer() {
     ])
       .then(([path, offsetMs]) => {
         if (cancelled || !audioRef.current) return;
-        audioRef.current.src = mediaUrl(path);
+        const el2 = audioRef.current;
+        el2.src = mediaUrl(path);
         const start = startOffsetFor(currentTrack, pendingStartAt, offsetMs / 1000);
-        if (start > 0) audioRef.current.currentTime = start;
+        if (start > 0) el2.currentTime = start;
+        readyIdRef.current = currentTrack.id;
+
+        // Playback starts HERE, not in the transport effect below, and that is
+        // the whole fix for a double-clicked row doing nothing. `play()` sets
+        // `isPlaying` synchronously, so the transport effect runs in the same
+        // commit as this one and reaches `el.play()` while the path is still a
+        // promise — on a fresh window there is no source to start, and with a
+        // track already loaded it restarts the *previous* one. Reading the
+        // flag from the store rather than from the closure keeps the answer
+        // current: the user may have hit pause while the path was in flight.
+        if (usePlayerStore.getState().isPlaying) {
+          el2.play().catch((e) => console.error('[player] play rejected:', e));
+        }
       })
       .catch((e) => {
         console.error('[player] could not load track:', e);
@@ -110,6 +127,11 @@ export function usePlayer() {
     const el = audioRef.current;
     if (!el) return;
     if (isPlaying) {
+      // Nothing loaded for this track yet — the load effect starts it the
+      // moment the source lands. Calling play() here would start whatever the
+      // element last held, which is silence on the first track and the
+      // previous track on every one after it.
+      if (readyIdRef.current !== currentTrack?.id) return;
       el.play().catch((e) => console.error('[player] play rejected:', e));
       return;
     }
@@ -119,7 +141,7 @@ export function usePlayer() {
       el.currentTime = 0;
       setCurrentTime(0);
     }
-  }, [isPlaying, stopSeq, setCurrentTime]);
+  }, [isPlaying, stopSeq, setCurrentTime, currentTrack?.id]);
 
   return { seek };
 }

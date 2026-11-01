@@ -99,7 +99,7 @@ function RowButton({
         <Music size={13} color="currentColor" variant="Linear" />
       )}
       <span className="min-w-0 flex-1 truncate">{collection.name}</span>
-      <span className="mono tnum text-[11px] text-gray-500">
+      <span className="mono tnum text-[12px] text-gray-500">
         {formatCount(collection.trackCount)}
       </span>
     </button>

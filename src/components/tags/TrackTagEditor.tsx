@@ -92,18 +92,18 @@ function AnalysisFacts({ track }: { track: Track }) {
           pad={settings?.padCamelotNumbers}
           modeAmbiguous={track.keyModeAmbiguous}
         />
-        <span className="mono tnum text-[11px] text-gray-400">
+        <span className="mono tnum text-[12px] text-gray-400">
           {formatTempo(track.tempoDisplay, settings?.tempoDecimals ?? 0, track.tempoResidualMs)}{' '}
           BPM
         </span>
-        <span className="mono tnum text-[11px] text-gray-400">
+        <span className="mono tnum text-[12px] text-gray-400">
           Energy {track.energy ?? '\u2014'}
         </span>
       </div>
-      <span className="mono text-[11px] text-gray-500">
+      <span className="mono text-[12px] text-gray-500">
         {formatBitrate(track.bitrateKbps)}
       </span>
-      <span className="mono text-[11px] text-gray-500" title={track.path}>
+      <span className="mono text-[12px] text-gray-500" title={track.path}>
         {truncatePath(track.path, 40)}
       </span>
     </div>

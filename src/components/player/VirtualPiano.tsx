@@ -124,7 +124,7 @@ function Key({
 
   return (
     <span
-      className={`flex h-full w-full items-end justify-center rounded-b-sm pb-1 text-[9px] ${lit}`}
+      className={`flex h-full w-full items-end justify-center rounded-b-sm pb-1 text-[10px] ${lit}`}
     >
       {white && pitchName}
     </span>

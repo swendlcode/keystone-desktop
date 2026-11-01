@@ -1,5 +1,6 @@
 pub mod hasher;
 pub mod indexer;
+pub mod music_library;
 pub mod peaks;
 pub mod reconciler;
 pub mod renamer;

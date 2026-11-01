@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+import { setTrackDrag } from '../collections/dragTypes';
 import type { TrackWindow } from './useTrackWindow';
 import { useLibraryStore } from '../../stores/libraryStore';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -59,6 +60,25 @@ export function useRowInteraction(window: TrackWindow, autoPlay: boolean) {
     [play],
   );
 
+  /**
+   * Drag rows out to a collection in the sidebar.
+   *
+   * The collection rows have understood this payload since they were written;
+   * the library table simply never produced one, so the only way to file a
+   * track was from the tag view. Dragging a row that is outside the selection
+   * drags that row alone, which is what every file manager does and what the
+   * tag table already did.
+   */
+  const onRowDragStart = useCallback((e: React.DragEvent, index: number) => {
+    const track = winRef.current.trackAt(index);
+    if (!track) return;
+    const selected = useLibraryStore.getState().selectedIds;
+    setTrackDrag(
+      e.dataTransfer,
+      selected.has(track.id) ? [...selected] : [track.id],
+    );
+  }, []);
+
   const onRowContextMenu = useCallback((e: React.MouseEvent, index: number) => {
     const track = winRef.current.trackAt(index);
     if (!track) return;
@@ -82,6 +102,7 @@ export function useRowInteraction(window: TrackWindow, autoPlay: boolean) {
     play,
     onRowMouseDown,
     onRowDoubleClick,
+    onRowDragStart,
     onRowContextMenu,
   };
 }

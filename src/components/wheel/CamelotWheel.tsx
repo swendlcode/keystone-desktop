@@ -19,7 +19,6 @@ interface CamelotWheelProps {
   /** Whether the selection's three neighbours are lit as part of the filter. */
   includeCompatible: boolean;
   onSelect: (code: string) => void;
-  onClear: () => void;
 }
 
 /**
@@ -31,9 +30,14 @@ interface CamelotWheelProps {
  * one fixed viewBox scaled by CSS rather than a function of a pixel size prop.
  *
  * The centre is HTML over the SVG rather than `<text>` plus a `<rect>` hit
- * area. Clearing the filter has to be an obvious, ordinary button — it is the
- * way out of the app's most sticky filter — and a real `<button>` gets focus,
- * hover and the house styles for free.
+ * area, so the readout in the hole gets the house type styles for free.
+ *
+ * It says what the state is and does not act on it. Clearing the filter used
+ * to be a word inside the hole, under the key it was about to throw away:
+ * small, unlabelled as a control, and in the one place a user looks to read
+ * the current selection rather than to change it. `WheelPanel` puts a real
+ * CLEAR FILTER button under the wheel instead, which is both findable and
+ * what every other Camelot wheel does.
  */
 export function CamelotWheel({
   selected,
@@ -41,7 +45,6 @@ export function CamelotWheel({
   counts,
   includeCompatible,
   onSelect,
-  onClear,
 }: CamelotWheelProps) {
   const compatible = useMemo(
     () =>
@@ -90,7 +93,7 @@ export function CamelotWheel({
       </svg>
 
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1">
-        <WheelCentre selected={selected} playing={playing} onClear={onClear} />
+        <WheelCentre selected={selected} playing={playing} />
       </div>
     </div>
   );
@@ -107,11 +110,9 @@ export function CamelotWheel({
 function WheelCentre({
   selected,
   playing,
-  onClear,
 }: {
   selected: string | null;
   playing: string | null;
-  onClear: () => void;
 }) {
   if (selected) {
     return (
@@ -119,13 +120,7 @@ function WheelCentre({
         <span className="mono tnum text-2xl leading-none text-keystone-white">
           {selected}
         </span>
-        <button
-          type="button"
-          onClick={onClear}
-          className="label pointer-events-auto rounded px-1.5 py-0.5 hover:bg-gray-800 hover:text-keystone-white"
-        >
-          Clear
-        </button>
+        <span className="label">Filtered</span>
       </>
     );
   }

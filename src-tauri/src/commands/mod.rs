@@ -5,6 +5,7 @@ pub mod analysis_commands;
 pub mod collection_commands;
 pub mod cue_commands;
 pub mod export_commands;
+pub mod import_commands;
 pub mod library_commands;
 pub mod player_commands;
 pub mod settings_commands;

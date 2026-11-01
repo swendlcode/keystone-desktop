@@ -71,7 +71,7 @@ export function ExportTargetRow({
       </div>
 
       {path && !blocked && (
-        <p className="mono truncate pl-6 text-[11px] text-gray-500" title={path}>
+        <p className="mono truncate pl-6 text-[12px] text-gray-500" title={path}>
           {path}
         </p>
       )}
@@ -144,7 +144,7 @@ function BackupList({ target }: { target: ExportTarget }) {
           type="button"
           disabled={restore.isPending}
           onClick={() => restore.mutate({ target, path: b.path })}
-          className="mono block w-full truncate text-left text-[11px] text-gray-400 hover:text-keystone-lime"
+          className="mono block w-full truncate text-left text-[12px] text-gray-400 hover:text-keystone-lime"
           title={b.path}
         >
           Restore {new Date(b.createdUnix * 1000).toLocaleString()}

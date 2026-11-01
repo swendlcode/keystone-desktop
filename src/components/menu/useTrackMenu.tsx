@@ -1,9 +1,11 @@
 import { useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Category, Keyboard } from '../ui/icons';
+import { Category, Keyboard, Music } from '../ui/icons';
+import { useAddToCollection, useCollections } from '../../hooks/useCollections';
 import { cueKeys } from '../../hooks/useCues';
 import { trackKeys } from '../../hooks/useLibrary';
 import { useEffectiveSettings } from '../../hooks/useSettings';
+import { useLibraryStore } from '../../stores/libraryStore';
 import { useUiStore } from '../../stores/uiStore';
 import { useSettingsWriter } from '../settings/useSettingsWriter';
 import { TARGET_FLAG, TARGET_ORDER, useExportTargets } from '../settings/useExportTargets';
@@ -39,6 +41,9 @@ export function useTrackMenu(
   const settings = useEffectiveSettings();
   const write = useSettingsWriter();
   const { data: targets = [] } = useExportTargets();
+  const { data: collections = [] } = useCollections();
+  const addToCollection = useAddToCollection();
+  const selectedIds = useLibraryStore((s) => s.selectedIds);
   const openInfo = useUiStore((s) => s.openInfo);
 
   const refresh = useCallback(
@@ -64,10 +69,47 @@ export function useTrackMenu(
       ask,
     };
 
+    // A right-click inside the selection acts on the whole selection; outside
+    // it, on that row alone. The row handlers already select an unselected
+    // row before opening the menu, so by the time this runs the two cases
+    // have converged — but reading the set rather than assuming it keeps the
+    // menu honest if a caller ever opens it some other way.
+    const targetIds = selectedIds.has(track.id) ? [...selectedIds] : [track.id];
+    const fileable = collections.filter((c) => c.kind !== 'smart');
+
     return [
       ...fileItems(ctx),
       ...tagItems(ctx),
       ...cueItems(ctx),
+      {
+        id: 'add-to-collection',
+        label:
+          targetIds.length > 1
+            ? `Add ${targetIds.length} Tracks to Collection`
+            : 'Add to Collection',
+        icon: <Music size={12} color="currentColor" variant="Linear" />,
+        separatorBefore: true,
+        // A smart collection's membership is a rule, so filing into one would
+        // appear to work and then not — the same reason the sidebar rows
+        // refuse a drop.
+        items: fileable.length
+          ? fileable.map((c) => ({
+              id: `collection-${c.id}`,
+              label: c.name,
+              onSelect: () =>
+                addToCollection.mutate({
+                  collectionId: c.id,
+                  trackIds: targetIds,
+                }),
+            }))
+          : [
+              {
+                id: 'no-collections',
+                label: 'No collections yet',
+                disabled: true,
+              },
+            ],
+      },
       {
         id: 'columns',
         label: 'Columns',
@@ -83,5 +125,17 @@ export function useTrackMenu(
       },
       removeItem(ctx),
     ];
-  }, [ask, openInfo, qc, refresh, settings, targets, track, write]);
+  }, [
+    addToCollection,
+    ask,
+    collections,
+    openInfo,
+    qc,
+    refresh,
+    selectedIds,
+    settings,
+    targets,
+    track,
+    write,
+  ]);
 }

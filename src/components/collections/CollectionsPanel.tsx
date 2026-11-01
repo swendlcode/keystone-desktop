@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Add } from '../ui/icons';
 import { ScrollArea } from '../ui/ScrollArea';
-import { AnalysisQueue } from '../library/AnalysisQueue';
 import { ConfirmDialog } from '../settings/ConfirmDialog';
 import { CollectionRow } from './CollectionRow';
 import { NewCollectionField } from './NewCollectionField';
@@ -18,11 +17,11 @@ import {
 import type { Collection } from '../../types';
 
 /**
- * The sidebar below the wheel: queue state at the top, then the collections.
+ * The sidebar below the wheel: the collections.
  *
- * That order is SPEC.md's and it is the right one — the queue is the answer to
- * "why is this row still empty", so it has to be visible without scrolling
- * while the collections list, which can run to dozens of rows, scrolls under it.
+ * The analysis queue used to sit above them and no longer does — it is a
+ * transient and lives on the status bar now, where it costs nothing while
+ * nothing is running. See `layout/AnalysisStatus`.
  */
 export function CollectionsPanel() {
   const { data: collections = [] } = useCollections();
@@ -50,8 +49,6 @@ export function CollectionsPanel() {
 
   return (
     <>
-      <AnalysisQueue />
-
       <PanelHeader onNew={() => setCreating(true)} />
 
       <ScrollArea className="min-h-0 flex-1 px-3 pb-3">

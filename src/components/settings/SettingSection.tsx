@@ -35,7 +35,7 @@ export function SettingGroup({
       }`}
     >
       {label && <span className="label">{label}</span>}
-      {hint && <p className="text-[11px] text-gray-400">{hint}</p>}
+      {hint && <p className="text-[12px] text-gray-400">{hint}</p>}
       {children}
     </div>
   );
@@ -55,7 +55,7 @@ export function SettingRow({
     <div className="flex items-start justify-between gap-4">
       <span className="min-w-0">
         <span className="block text-xs text-gray-300">{label}</span>
-        {hint && <span className="mt-0.5 block text-[11px] text-gray-500">{hint}</span>}
+        {hint && <span className="mt-0.5 block text-[12px] text-gray-500">{hint}</span>}
       </span>
       {children && <span className="shrink-0">{children}</span>}
     </div>
@@ -76,7 +76,7 @@ export function SettingNote({
 }) {
   return (
     <p
-      className={`text-[11px] leading-relaxed ${
+      className={`text-[12px] leading-relaxed ${
         tone === 'warn' ? 'text-amber-400' : 'text-gray-500'
       }`}
     >

@@ -1,4 +1,4 @@
-import { KeyBadge } from '../ui/KeyBadge';
+import { KeyResult } from '../library/KeyResult';
 import { setTrackDrag } from '../collections/dragTypes';
 import { CoverArtThumb } from './CoverArtThumb';
 import { TagCell } from './TagCell';
@@ -22,18 +22,22 @@ export const COLS = 'grid-cols-[44px_1fr_1fr_1.4fr_76px_76px_60px_1fr]';
  */
 export function TagRow({
   track,
+  index,
   top,
   onOpen,
+  onRowMouseDown,
 }: {
   track: Track;
+  /** Row index, so the table can resolve a shift-click range. */
+  index: number;
   top: number;
   onOpen: (trackId: string) => void;
+  onRowMouseDown: (e: React.MouseEvent, index: number) => void;
 }) {
   const settings = useEffectiveSettings();
   const writeField = useWriteField();
   const selectedIds = useLibraryStore((s) => s.selectedIds);
   const select = useLibraryStore((s) => s.select);
-  const toggleSelect = useLibraryStore((s) => s.toggleSelect);
   const openContextMenu = useUiStore((s) => s.openContextMenu);
   const selected = selectedIds.has(track.id);
 
@@ -49,9 +53,7 @@ export function TagRow({
         // what every file manager does.
         setTrackDrag(e.dataTransfer, selected ? [...selectedIds] : [track.id])
       }
-      onMouseDown={(e) =>
-        e.metaKey || e.ctrlKey ? toggleSelect(track.id) : select(track.id)
-      }
+      onMouseDown={(e) => onRowMouseDown(e, index)}
       onDoubleClick={() => onOpen(track.id)}
       onContextMenu={(e) => {
         e.preventDefault();
@@ -67,11 +69,10 @@ export function TagRow({
         {formatTempo(track.tempoDisplay, settings?.tempoDecimals ?? 0, track.tempoResidualMs)}
       </span>
       <span className="px-1.5">
-        <KeyBadge
-          camelot={track.camelot}
-          notation={settings?.keyNotation}
-          pad={settings?.padCamelotNumbers}
-          modeAmbiguous={track.keyModeAmbiguous}
+        <KeyResult
+          track={track}
+          notation={settings?.keyNotation ?? 'camelot'}
+          pad={settings?.padCamelotNumbers ?? false}
         />
       </span>
       <span className="mono tnum px-1.5 text-xs text-gray-400">{track.energy ?? ''}</span>
