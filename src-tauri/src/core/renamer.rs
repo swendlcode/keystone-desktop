@@ -2,48 +2,138 @@
 //!
 //! **Renaming is the only irreversible operation in the app**, and one setting
 //! runs it automatically after processing. The journal row exists before
-//! `fs::rename` and is cleared after the database UPDATE, so a crash in the
-//! middle is recoverable rather than a row pointing at a path that no longer
-//! exists.
+//! `fs::rename` and is cleared after the database UPDATE, so a crash in between
+//! is recoverable rather than a row pointing at a path that is gone.
 //!
 //! Four hazards, each of which produces silent wrong behaviour rather than an
-//! error, and each of which owes a unit test:
+//! error, and each of which owes a test in `renamer_apply_tests.rs`:
+//! case-only renames on a case-insensitive filesystem, which go via a staging
+//! name ([`paths`], plus [`find_staged`] for the crash in between); NFD vs NFC,
+//! where macOS hands back decomposed names and only a normalised compare says
+//! they are one file ([`same_path`]); idempotence, since
+//! `Track - 8A - 128 - 8A - 128.mp3` must be impossible and `original_filename`
+//! is what makes the strip exact ([`compose_stem`]); and Windows' illegal
+//! characters, reserved device names and 255-byte component limit, which
+//! truncates the *Original* segment and never the key/tempo suffix
+//! ([`sanitize_component`], [`truncate_component`]).
 //!
-//! - **Case-only renames on a case-insensitive filesystem.** APFS is
-//!   case-insensitive by default, so `track.mp3` -> `Track.mp3` is a no-op or an
-//!   error depending on the call. Go via a temporary name.
-//! - **NFD vs NFC.** macOS stores decomposed filenames, so a string compare
-//!   against a composed name says "different file" when it is the same file.
-//!   Compare normalised, and use `same-file` for identity rather than comparing
-//!   path strings at all.
-//! - **Idempotence.** `Track - 8A - 128 - 8A - 128.mp3` must be impossible.
-//!   `original_filename` is what makes the strip exact instead of a regex guess.
-//! - **Windows.** Illegal characters, reserved device names (`CON`, `NUL`,
-//!   `COM1`..), and the 255-byte component limit — which must truncate the
-//!   *Original* segment, never the key/tempo suffix, or the rename defeats its
-//!   own purpose.
+//! The naming rules and the path hazards are implemented and tested once, in
+//! [`crate::tags::rename::compose`] and [`crate::tags::rename::paths`], and
+//! re-exported from here rather than written a second time: a second copy that
+//! compiles is the hazard the project notes record against `analysis/chroma.rs`.
+//!
+//! What this module owns is the half that talks to the database: [`plan`] is the
+//! wired entry point, [`apply`] is journal-first through the repository, and
+//! [`recover_journal`] is what `lib.rs` replays at launch. The journal goes
+//! through `db/track_repo/journal.rs` because all SQL belongs in `db/`, so
+//! `tags/rename/journal.rs` — which predates it and writes `file_ops` with its
+//! own inline SQL — is not called from anywhere here.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use unicode_normalization::UnicodeNormalization;
-
 use crate::db::{FileOp, TrackRepository};
-use crate::error::Result;
-use crate::models::{RenamePattern, RenamePlan, RenameReport, Settings, Track};
+use crate::error::{KeystoneError, Result};
+use crate::models::{RenamePlan, RenamePlanItem, RenameReport, Settings, TagWriteFailure, Track};
+use crate::tags::rename::paths;
 
-/// Maximum bytes in one path component on the filesystems we target.
-pub const MAX_COMPONENT_BYTES: usize = 255;
+pub use crate::tags::rename::compose::{
+    compose_stem, sanitize_component, strip_stem, truncate_component, MAX_COMPONENT_BYTES,
+};
+pub use crate::tags::rename::paths::{is_case_only_change, is_same_file};
+
+/// The prefix [`paths::move_file`] parks a file under between the two steps of a
+/// case-only rename. Spelled again because `paths` keeps its staging name
+/// private; it wants exposing, since a drift makes an interrupted rename
+/// unrecoverable in silence.
+const STAGING_PREFIX: &str = ".keystone-";
 
 /// Builds the plan. Nothing moves. Every item that will be skipped carries the
 /// reason, because the preview is the undo.
-pub fn plan(_tracks: &[Track], _settings: &Settings) -> Result<RenamePlan> {
-    todo!("owes: compose each target name, detect collisions, mark skips with reasons")
+///
+/// The composition is [`crate::tags::rename::plan`]: the five patterns, the
+/// idempotence guard, the collision rules and the Windows limits have one
+/// implementation and one set of tests. This is the name the commands call.
+pub fn plan(tracks: &[Track], settings: &Settings) -> Result<RenamePlan> {
+    crate::tags::rename::plan(tracks, settings)
 }
 
-/// Applies a plan, journal-first, one file at a time.
-pub fn apply(_plan: &RenamePlan, _repo: &Arc<TrackRepository>) -> Result<RenameReport> {
-    todo!("owes: write the file_ops row, rename, UPDATE the track, clear the row")
+/// Applies a plan, journal-first, one file at a time and never in a
+/// transaction: `fs::rename` is not transactional, so a batch that failed half
+/// way through would be unwound by hand. Each file settles completely — row,
+/// move, UPDATE, row cleared — before the next one starts.
+pub fn apply(plan: &RenamePlan, repo: &Arc<TrackRepository>) -> Result<RenameReport> {
+    let mut report = RenameReport::default();
+    for item in &plan.items {
+        if item.skipped.is_some() {
+            report.skipped += 1;
+            continue;
+        }
+        match rename_one(repo, item) {
+            Ok(()) => report.renamed += 1,
+            Err(e) => {
+                report.failed += 1;
+                report.failures.push(TagWriteFailure {
+                    track_id: item.track_id.clone(),
+                    path: item.from_path.clone(),
+                    reason: e.to_string(),
+                });
+            }
+        }
+    }
+    Ok(report)
+}
+
+fn rename_one(repo: &Arc<TrackRepository>, item: &RenamePlanItem) -> Result<()> {
+    let Some(track) = repo.get_by_id(&item.track_id)? else {
+        return Err(KeystoneError::NotFound(format!("track {}", item.track_id)));
+    };
+    // The preview is the undo, so a plan can be minutes old when it is
+    // confirmed. If the row has moved on since, moving the file is a guess.
+    if !same_path(&track.path, &item.from_path) {
+        return Err(KeystoneError::Other(format!(
+            "{} has moved since the preview was built",
+            item.from_path
+        )));
+    }
+
+    // The row goes in first. Everything after this point is recoverable; a
+    // rename without it is not.
+    let op = repo.record_file_op(&item.track_id, &item.from_path, &item.to_path)?;
+    let result = move_and_record(repo, item, &track, &op);
+    // Cleared whatever happened: on failure nothing moved, on success the
+    // database is already in step. A failed DELETE is not a failed rename —
+    // recovery finds the row, sees both sides agree and clears it.
+    if let Err(e) = repo.clear_file_op(&op) {
+        tracing::warn!("rename: journal row {} could not be cleared: {}", op, e);
+    }
+    result
+}
+
+fn move_and_record(
+    repo: &Arc<TrackRepository>,
+    item: &RenamePlanItem,
+    track: &Track,
+    op: &str,
+) -> Result<()> {
+    paths::move_file(Path::new(&item.from_path), Path::new(&item.to_path))?;
+    repo.mark_file_op_renamed(op)?;
+    let original = Path::new(&item.from_path)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned());
+    // `update_path` COALESCEs `original_filename`, so a second rename cannot
+    // overwrite the name the first one started from — which is what keeps the
+    // inverse strip exact rather than a regex guess.
+    //
+    // `rename_pattern` is passed back unchanged rather than recorded: a
+    // `RenamePlan` carries no pattern, and a guess in the column that says which
+    // one was applied is worse than the value already in it.
+    repo.update_path(
+        &item.track_id,
+        &item.to_path,
+        original.as_deref(),
+        track.rename_pattern.as_deref(),
+    )
 }
 
 /// Replays `file_ops` rows left behind by a crash. Called on startup, before
@@ -71,33 +161,27 @@ pub fn recover_journal(repo: &Arc<TrackRepository>) -> Result<usize> {
     Ok(repaired)
 }
 
-/// Settles one journal row. `true` when the database had to be corrected.
+/// Settles one journal row. `true` when something was corrected.
 fn replay(repo: &Arc<TrackRepository>, op: &FileOp) -> Result<bool> {
-    let from = Path::new(&op.from_path);
-    let to = Path::new(&op.to_path);
-    let landed = match outcome(from, to) {
-        Some(Outcome::Renamed) => &op.to_path,
-        Some(Outcome::NotRenamed) => &op.from_path,
-        None => {
-            // Neither path is on disk: the file was moved or deleted outside the
-            // app while the journal row was open. Nothing here can tell which
-            // side won, and guessing would point the row at a path that does not
-            // exist. Reconciliation marks it missing instead.
-            tracing::warn!(
-                "rename recovery: neither {} nor {} exists; left for reconciliation",
-                op.from_path,
-                op.to_path
-            );
-            return Ok(false);
-        }
+    let Some((landed, moved)) = settle(op)? else {
+        // Neither path is on disk and nothing is parked: the file was moved or
+        // deleted outside the app while the journal row was open. Nothing here
+        // can tell which side won, and guessing would point the row at a path
+        // that does not exist. Reconciliation marks it missing instead.
+        tracing::warn!(
+            "rename recovery: neither {} nor {} exists; left for reconciliation",
+            op.from_path,
+            op.to_path
+        );
+        return Ok(false);
     };
     let Some(track) = repo.get_by_id(&op.track_id)? else {
         // The track was removed from the library after the journal row was
         // written. The row is stale, not a disagreement.
-        return Ok(false);
+        return Ok(moved);
     };
     if same_path(&track.path, landed) {
-        return Ok(false);
+        return Ok(moved);
     }
     let original = Path::new(&op.from_path)
         .file_name()
@@ -112,6 +196,27 @@ fn replay(repo: &Arc<TrackRepository>, op: &FileOp) -> Result<bool> {
         track.rename_pattern.as_deref(),
     )?;
     Ok(true)
+}
+
+/// Where the file is, and whether getting it there needed a move. `None` when
+/// the filesystem cannot say.
+fn settle<'a>(op: &'a FileOp) -> Result<Option<(&'a str, bool)>> {
+    let from = Path::new(&op.from_path);
+    let to = Path::new(&op.to_path);
+    Ok(match outcome(from, to) {
+        Some(Outcome::Renamed) => Some((op.to_path.as_str(), false)),
+        Some(Outcome::NotRenamed) => Some((op.from_path.as_str(), false)),
+        // Neither side exists: a case-only rename parks the file under a
+        // staging name, and a crash in that window leaves it under a name
+        // neither side of the row mentions.
+        None => match find_staged(to) {
+            Some(staged) => {
+                std::fs::rename(&staged, to)?;
+                Some((op.to_path.as_str(), true))
+            }
+            None => None,
+        },
+    })
 }
 
 /// Which side of the rename the filesystem is on. `None` means it cannot say.
@@ -156,73 +261,39 @@ fn spelled_on_disk(path: &Path) -> bool {
     let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
         return false;
     };
-    let want = nfc(&name.to_string_lossy());
+    let want = paths::nfc(&name.to_string_lossy());
     match std::fs::read_dir(parent) {
         Ok(entries) => entries
             .flatten()
-            .any(|e| nfc(&e.file_name().to_string_lossy()) == want),
+            .any(|e| paths::nfc(&e.file_name().to_string_lossy()) == want),
         Err(_) => false,
     }
 }
 
-/// Path equality for comparing a stored path against one from the journal:
-/// NFC-normalised, so an NFD spelling of the same name is not a difference.
+/// Looks for the file parked by the first half of a case-only rename.
+///
+/// Matched on the NFC-normalised target name, so a decomposed directory entry
+/// still answers to a composed path out of the database.
+fn find_staged(to: &Path) -> Option<PathBuf> {
+    let (dir, name) = (to.parent()?, to.file_name()?);
+    let wanted = paths::nfc(&name.to_string_lossy());
+    std::fs::read_dir(dir).ok()?.flatten().find_map(|entry| {
+        let spelled = paths::nfc(&entry.file_name().to_string_lossy());
+        let staged = spelled.starts_with(STAGING_PREFIX) && spelled.ends_with(&wanted);
+        staged.then(|| entry.path())
+    })
+}
+
+/// Path equality for a stored path against one from the journal: NFC-normalised,
+/// so an NFD spelling of the same name is not a difference.
 fn same_path(a: &str, b: &str) -> bool {
-    a == b || nfc(a) == nfc(b)
-}
-
-fn nfc(s: &str) -> String {
-    s.nfc().collect()
-}
-
-/// Composes the new stem from the pattern. `key` and `tempo` are already
-/// formatted by the Key Notation and Tempo settings; this function does not
-/// re-decide notation.
-pub fn compose_stem(
-    _original: &str,
-    _pattern: RenamePattern,
-    _key: &str,
-    _tempo: &str,
-) -> String {
-    todo!("owes: the five patterns from SPEC.md §3")
-}
-
-/// The exact inverse, using `original_filename` rather than a pattern match.
-/// Backs the context menu's Remove Key from File Name.
-pub fn strip_stem(_current: &str, _original_filename: Option<&str>) -> String {
-    todo!("owes: restore the original stem exactly, or strip a trailing key/tempo suffix")
-}
-
-/// Replaces characters the target filesystem rejects and escapes reserved
-/// device names.
-pub fn sanitize_component(_name: &str) -> String {
-    todo!("owes: strip <>:\"/\\|?* and control chars; escape CON, NUL, COM1.., LPT1..")
-}
-
-/// Truncates to fit `MAX_COMPONENT_BYTES`, taking the bytes off the `original`
-/// segment and never off `suffix`.
-pub fn truncate_component(_original: &str, _suffix: &str, _max_bytes: usize) -> String {
-    todo!("owes: UTF-8-safe truncation of the original segment only")
-}
-
-/// Identity, not string equality. Uses `same-file` so a hard link, a symlink and
-/// an NFD/NFC spelling of the same file all compare equal.
-pub fn is_same_file(a: &Path, b: &Path) -> bool {
-    match same_file::is_same_file(a, b) {
-        Ok(same) => same,
-        // One of them could not be opened — most often because it does not
-        // exist. Fall back to the normalised string compare, which is the only
-        // thing left to go on and is still right for an NFD/NFC pair.
-        Err(_) => same_path(&a.to_string_lossy(), &b.to_string_lossy()),
-    }
-}
-
-/// True when the two names differ only by case, which needs the two-step
-/// rename on a case-insensitive filesystem.
-pub fn is_case_only_change(_from: &Path, _to: &Path) -> bool {
-    todo!("owes: case-insensitive equality but case-sensitive inequality")
+    a == b || paths::nfc(a) == paths::nfc(b)
 }
 
 #[cfg(test)]
 #[path = "renamer_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "renamer_apply_tests.rs"]
+mod apply_tests;

@@ -11,6 +11,7 @@
 use std::fmt::Write as _;
 
 use super::mirex::{FifthConvention, KeyScore, MIK_EXACT, MIK_WEIGHTED, PUBLISH_GATE_WEIGHTED};
+use super::HarnessReport;
 use super::synthetic::{SetScore, SyntheticReport};
 
 /// Printed with every report. Not a disclaimer — a statement of what has and
@@ -171,5 +172,53 @@ pub fn synthetic(r: &SyntheticReport) -> String {
          It is NOT met or tested by anything above."
     );
     let _ = writeln!(out, "\nharness elapsed {} ms", r.elapsed_ms);
+    out
+}
+
+/// The caveats that attach to a run over the real archive.
+///
+/// Deliberately not [`CAVEAT`], which opens by saying the numbers are
+/// synthetic. Printing that one after a GiantSteps run would be false in its
+/// first sentence and ignored by its third, and the points that *do* still
+/// apply are restated here instead.
+pub const CORPUS_CAVEAT: &str = "\
+What this number is, and is not:
+  1. It is the TEMPLATE VOTER ALONE. There is no bundled S-KEY graph in this
+     tree, so the ensemble — the cheapest real accuracy gain available — is
+     unmeasured. Read the figure as a floor for the engine, not its score.
+  2. The GiantSteps+ revision is 600 tracks and is NOT byte-identical to the
+     604 the published figures use, so a difference of a point or two against
+     the literature means nothing.
+  3. The set is 84.8% minor. A minor-biased detector posts a good weighted
+     score while being useless, which is why mode accuracy is printed beside
+     the total and never folded into it.
+  4. Nothing was dropped. Low-confidence and key-change annotations are scored
+     like any other and counted above; dropping the tracks every app failed is
+     what makes a marketed accuracy figure meaningless.";
+
+/// A run over an annotated corpus on disk, counts first.
+///
+/// The two counts come before the score on purpose: a corpus that quietly
+/// shrank is the easiest way to publish a wrong number, so how many
+/// annotations were found and how many were actually scored are the first
+/// things on the page.
+pub fn corpus_run(label: &str, r: &HarnessReport) -> String {
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "\n=== Keystone key accuracy harness: {label} ===\n\n\
+         {} annotation(s) loaded, {} scored, {} unreadable, {} with a key change",
+        r.annotations_loaded,
+        r.tracks_scored,
+        r.unreadable.len(),
+        r.key_changes
+    );
+    for (path, reason) in &r.unreadable {
+        let _ = writeln!(out, "  unreadable  {}  — {}", path.display(), reason);
+    }
+    let _ = writeln!(out);
+    let _ = write!(out, "{}", key_score(label, &r.key));
+    let _ = writeln!(out, "  {} track(s) in {} ms", r.tracks_scored, r.elapsed_ms);
+    let _ = writeln!(out, "\n{CORPUS_CAVEAT}");
     out
 }

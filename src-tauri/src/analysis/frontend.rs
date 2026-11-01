@@ -1,10 +1,41 @@
 //! Shared DSP front end: STFT, filterbanks, HPSS and band splits. Everything
 //! onsets, structure and energy have in common lives here so none of them
 //! recomputes a spectrogram the others already have.
+//!
+//! Layout:
+//!
+//! - [`stft`] — the frame loop that materialises a frames x bins magnitude
+//!   matrix, with the centring and scaling conventions stated once.
+//! - [`banks`] — the sparse triangular filterbanks and the log compression
+//!   applied straight after a band projection.
+//! - [`hpss`] — harmonic/percussive separation by median filtering.
+//! - [`curves`] — the per-frame reductions: band energy, flux, local
+//!   normalisation.
+//! - [`spectrum`] — per-frame spectral operations: high-pass, whitening,
+//!   centroid, sub-bin peak position.
+//!
+//! Everything above this layer inherits this layer's errors, and a scaling
+//! mistake here surfaces as a key-detection accuracy loss with no visible
+//! cause. That is why the tests pin signals whose spectrum can be stated
+//! exactly — one sine in one bin, silence, and Parseval — rather than only
+//! checking that the shapes line up.
+
+mod banks;
+mod curves;
+mod hpss;
+mod spectrum;
+mod stft;
+
+#[cfg(test)]
+mod tests;
 
 use ndarray::Array2;
 
-use crate::error::Result;
+pub use self::banks::{log_compress, log_filterbank, mel_filterbank};
+pub use self::curves::{band_energy, hwr_flux, local_normalize};
+pub use self::hpss::hpss;
+pub use self::spectrum::{high_pass, parabolic_peak, spectral_centroid, spectral_whitening};
+pub use self::stft::stft_magnitude;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowKind {
@@ -53,12 +84,25 @@ impl Spectrogram {
     }
 }
 
-pub fn window(_kind: WindowKind, _n: usize) -> Vec<f32> {
-    todo!("owes: Hann, symmetric and periodic")
-}
-
-pub fn stft_magnitude(_samples: &[f32], _sample_rate: u32, _opts: &SpectrogramOpts) -> Result<Spectrogram> {
-    todo!("owes: realfft forward transform per frame into a frames x bins matrix")
+/// Hann, by the raised-cosine definition.
+///
+/// The two forms differ only in the denominator, and the difference is half a
+/// sample of shift plus a slightly different coherent gain — `sum(w)` is
+/// `n/2` exactly for the periodic form and `(n-1)/2` for the symmetric one. A
+/// stage that windows with one and scales as if it had used the other is wrong
+/// by that ratio in every magnitude it produces, which is why the choice is a
+/// parameter the caller states rather than a default buried in the frame loop.
+pub fn window(kind: WindowKind, n: usize) -> Vec<f32> {
+    if n <= 1 {
+        return vec![1.0; n];
+    }
+    let denom = match kind {
+        WindowKind::Hann => (n - 1) as f32,
+        WindowKind::HannPeriodic => n as f32,
+    };
+    (0..n)
+        .map(|i| 0.5 - 0.5 * (2.0 * std::f32::consts::PI * i as f32 / denom).cos())
+        .collect()
 }
 
 /// One band of a triangular filterbank, stored sparsely.
@@ -78,85 +122,28 @@ pub struct TriangularFilterbank {
 
 impl TriangularFilterbank {
     /// Projects one magnitude frame into `out`, which must be `bands.len()` long.
-    pub fn apply(&self, _frame: &[f32], _out: &mut [f32]) {
-        todo!("owes: per band, dot the weights against the frame from start_bin")
+    ///
+    /// A band is truncated rather than skipped when the frame is shorter than
+    /// the bank was built for: a caller that hands over a cropped frame gets
+    /// the part of the band the frame covers, not a panic halfway through a
+    /// track.
+    pub fn apply(&self, frame: &[f32], out: &mut [f32]) {
+        debug_assert_eq!(out.len(), self.bands.len());
+        for (band, slot) in self.bands.iter().zip(out.iter_mut()) {
+            *slot = 0.0;
+            if band.start_bin >= frame.len() {
+                continue;
+            }
+            let bins = &frame[band.start_bin..];
+            let mut acc = 0.0f32;
+            for (m, w) in bins.iter().zip(band.weights.iter()) {
+                acc += *m * *w;
+            }
+            *slot = acc;
+        }
     }
 
     pub fn n_bands(&self) -> usize {
         self.bands.len()
     }
-}
-
-/// Log-spaced bands, which is what the onset front end uses: 64 bands from
-/// 30 Hz at 100 fps.
-pub fn log_filterbank(
-    _n_bins: usize,
-    _sample_rate: u32,
-    _n_fft: usize,
-    _n_bands: usize,
-    _f_min: f32,
-    _f_max: f32,
-) -> TriangularFilterbank {
-    todo!("owes: log-spaced triangular bands as (start_bin, weights)")
-}
-
-pub fn mel_filterbank(
-    _n_bins: usize,
-    _sample_rate: u32,
-    _n_fft: usize,
-    _n_mels: usize,
-    _f_min: f32,
-    _f_max: f32,
-) -> TriangularFilterbank {
-    todo!("owes: mel-spaced triangular bands")
-}
-
-/// `log(1 + gamma * x)` compression, applied in place.
-pub fn log_compress(_frame: &mut [f32], _gamma: f32) {
-    todo!("owes: in-place log1p compression")
-}
-
-/// Harmonic/percussive separation by median filtering: median across time gives
-/// the harmonic component, across frequency the percussive one. Roughly 17
-/// frames x 17 bins at hop 512.
-pub fn hpss(_spec: &Spectrogram, _time_median: usize, _freq_median: usize) -> Result<(Spectrogram, Spectrogram)> {
-    todo!("owes: median filtering along both axes and a soft mask back to magnitudes")
-}
-
-/// Per-frame energy inside a frequency band.
-pub fn band_energy(_spec: &Spectrogram, _lo_hz: f32, _hi_hz: f32) -> Vec<f32> {
-    todo!("owes: sum the bins covering [lo, hi) per frame")
-}
-
-/// Half-wave-rectified first-order difference, summed across bands.
-pub fn hwr_flux(_bands: &Array2<f32>) -> Vec<f32> {
-    todo!("owes: sum(max(0, x[t] - x[t-1])) across bands")
-}
-
-/// Local-mean subtraction over a window, half-wave rectify, then divide by the
-/// global standard deviation. The 1.5 s window is what makes the curve
-/// comparable across a track whose loudness changes.
-pub fn local_normalize(_curve: &mut Vec<f32>, _window_frames: usize) {
-    todo!("owes: subtract the running mean, rectify, divide by the global sd")
-}
-
-/// 200 Hz high-pass before the chroma FFT, killing percussive low-frequency
-/// noise that otherwise smears into the bass bins.
-pub fn high_pass(_samples: &mut [f32], _sample_rate: u32, _cutoff_hz: f32) {
-    todo!("owes: a biquad or one-pole high-pass, in place")
-}
-
-/// Spectral whitening (Röbel & Rodet 2005) on a magnitude frame.
-pub fn spectral_whitening(_frame: &mut [f32], _sample_rate: u32, _n_fft: usize) {
-    todo!("owes: divide by a smoothed spectral envelope")
-}
-
-pub fn spectral_centroid(_frame: &[f32], _bin_hz: f32) -> f32 {
-    todo!("owes: magnitude-weighted mean bin, in log-Hz")
-}
-
-/// Parabolic interpolation around a spectral peak, returning the sub-bin
-/// position. The tuning estimate has no sub-semitone resolution without it.
-pub fn parabolic_peak(_mags: &[f32], _bin: usize) -> f32 {
-    todo!("owes: three-point parabolic vertex")
 }

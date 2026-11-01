@@ -1,47 +1,64 @@
-//! S2 — tuning estimate and the corrective resample.
+//! S2 — the tuning estimate and the corrective resample.
 //!
-//! **This stage runs first and is not optional**, even though neither Faraldo
-//! nor Sha'ath measured an aggregate gain on A440 EDM. The key model's front end
-//! is 12 bins per octave — one bin per semitone, no sub-semitone resolution —
-//! and it was measured collapsing to the wrong tonic *and* the wrong mode at
-//! ±50 cents, with correcting the detune restoring the original prediction to
-//! three decimals. This is cheap insurance against catastrophic tail failures:
-//! vinyl rips, pitched edits, live recordings, turntable-pitched hip-hop. For
-//! this audience, that tail is the audience.
+//! The stage lives in [`crate::analysis::spectral::tuning`]. This module is the
+//! name the rest of the engine reaches it by and nothing else.
+//!
+//! It was a second, independent copy of S2 — the same function names carrying
+//! `todo!()`, sitting beside the finished implementation and reachable from the
+//! path the product used, while the working code was reachable only from
+//! `spectral::`. That is exactly the pathology [`crate::analysis`] already
+//! records for S6-S8, where the duplicate trio compiled and did nothing.
+//!
+//! Finishing the copy instead of removing it would have been worse than leaving
+//! it. The two copies had already drifted apart in their public shape: this one
+//! returned a `TuningEstimate` with no `concentration` field, so it had no way
+//! to say "this material is not pitched enough to measure" — and a `cents`
+//! value with nothing qualifying it is precisely how percussion ends up
+//! transposing a track. S2 is also a product surface twice over: the UI prints
+//! the offset and the key stage resamples on it, so a second implementation
+//! would drift from the one the tests and the eval harness actually measure,
+//! and nothing anywhere would report the divergence.
+//!
+//! One implementation, two paths to it.
 
-use crate::error::Result;
+pub use crate::analysis::spectral::tuning::*;
 
-pub const N_FFT: usize = 4096;
-pub const HOP: usize = 1024;
+#[cfg(test)]
+mod tests {
+    //! Reached through this path on purpose: these assertions fail if the alias
+    //! is ever replaced by a fresh implementation of S2 that drifts from the one
+    //! `spectral` tests.
 
-/// Below this, correcting costs a resample and buys nothing.
-pub const CORRECTION_THRESHOLD_CENTS: f32 = 10.0;
+    use super::{estimate, CORRECTION_THRESHOLD_CENTS, MIN_CONCENTRATION};
+    use crate::analysis::spectral::{test_signals as sig, test_unpitched as unp};
 
-/// ±1/3 semitone around A440 (Faraldo's range). Anything outside is a bad
-/// estimate rather than an unusually tuned record, and clamping is what stops
-/// one noisy track being transposed.
-pub const REF_HZ_MIN: f32 = 431.6;
-pub const REF_HZ_MAX: f32 = 448.5;
+    const SR: u32 = sig::TEST_RATE;
 
-#[derive(Debug, Clone, Copy)]
-pub struct TuningEstimate {
-    /// In [-50, +50].
-    pub cents: f32,
-    pub reference_hz: f32,
-    /// Whether the caller should resample.
-    pub needs_correction: bool,
-}
+    #[test]
+    fn a_tone_at_concert_pitch_reads_as_a440() {
+        let est = estimate(&sig::tone(69, SR, 2.0, 0.0), SR).unwrap();
+        assert!(est.cents.abs() < 4.0, "A440 read as {} cents", est.cents);
+        assert!(!est.needs_correction);
+        assert!(est.concentration > MIN_CONCENTRATION);
+    }
 
-/// Magnitude-weighted circular mean of `mod(12 * log2(f / (440/16)), 1)` folded
-/// to [-0.5, 0.5) semitones, over parabolically interpolated spectral peaks
-/// (Dressler & Streich). Circular, not linear: a linear mean of values either
-/// side of the fold cancels to zero.
-pub fn estimate(_samples: &[f32], _sample_rate: u32) -> Result<TuningEstimate> {
-    todo!("owes: interpolated peak picking and the magnitude-weighted circular mean")
-}
+    #[test]
+    fn a_known_detune_comes_back_as_that_detune() {
+        for detune in [-30.0f32, -8.0, 22.0] {
+            let est = estimate(&sig::tone(69, SR, 2.0, detune), SR).unwrap();
+            assert!(
+                (est.cents - detune).abs() < 6.0,
+                "{detune} cents read as {} cents",
+                est.cents
+            );
+            assert_eq!(est.needs_correction, detune.abs() > CORRECTION_THRESHOLD_CENTS);
+        }
+    }
 
-/// Resamples by `2^(-cents/1200)`. Only called when the offset clears the
-/// threshold.
-pub fn correct(_samples: &[f32], _sample_rate: u32, _cents: f32) -> Result<Vec<f32>> {
-    todo!("owes: rubato resample by the detune ratio")
+    #[test]
+    fn unpitched_material_never_asks_to_be_resampled() {
+        let est = estimate(&unp::percussion(SR, 4.0), SR).unwrap();
+        assert!(est.concentration < MIN_CONCENTRATION);
+        assert!(!est.needs_correction);
+    }
 }

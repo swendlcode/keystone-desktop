@@ -6,6 +6,20 @@
 //! call site and 0.6 redesigned the audio primitives. The port is its own task,
 //! paid for once, in the shared crate.
 
+mod levels;
+mod open;
+mod rate;
+mod stream;
+
+// Containers written by the tests themselves. Shared with the dev-only eval
+// feature for the same reason the DSP generators are: the harness has to build
+// its files from the *same* writer the decode tests use, or a writer bug can
+// flatter one and hide from the other.
+#[cfg(any(test, feature = "eval"))]
+pub mod fixtures;
+#[cfg(test)]
+mod tests;
+
 use std::path::Path;
 
 use crate::core::peaks::PeakPyramid;
@@ -77,24 +91,24 @@ pub struct DecodedAudio {
     pub peaks: Option<PeakPyramid>,
 }
 
-pub fn probe(_path: &Path) -> Result<AudioProbe> {
-    todo!("owes: symphonia probe for codec, rate, channels, bit depth, bitrate, duration")
+pub fn probe(path: &Path) -> Result<AudioProbe> {
+    open::probe(path)
 }
 
-pub fn audio_region(_path: &Path) -> Result<AudioRegion> {
-    todo!("owes: the first audio packet's byte offset and the data length")
+pub fn audio_region(path: &Path) -> Result<AudioRegion> {
+    open::audio_region(path)
 }
 
-/// Decodes once. Owes: downmix by arithmetic mean, resample with rubato, true
+/// Decodes once: arithmetic-mean downmix, rubato for the rate conversion, true
 /// peak and clipped-sample counting in the same pass, and streaming peak
 /// accumulation. Never retain a decoded track beyond this call.
-pub fn decode(_path: &Path, _opts: &DecodeOptions) -> Result<DecodedAudio> {
-    todo!("owes: one streaming decode producing both rates, levels and peaks")
+pub fn decode(path: &Path, opts: &DecodeOptions) -> Result<DecodedAudio> {
+    stream::decode(path, opts)
 }
 
 /// Rate conversion for the stages that need it, and for the tuning correction.
-pub fn resample(_samples: &[f32], _from: u32, _to: u32) -> Result<Vec<f32>> {
-    todo!("owes: rubato SincFixedIn conversion")
+pub fn resample(samples: &[f32], from: u32, to: u32) -> Result<Vec<f32>> {
+    rate::resample(samples, from, to)
 }
 
 pub fn is_supported_extension(ext: &str) -> bool {

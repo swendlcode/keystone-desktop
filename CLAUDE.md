@@ -64,6 +64,12 @@ cd src-tauri
 cargo test                                      # the unit suite
 cargo test --features eval                      # + the accuracy harness
 cargo run --features eval --bin keystone-eval    # the harness report, in full
+cargo run --release --features eval --bin keystone-eval -- --track <file>
+                                                # S1..S11 over one real file, every
+                                                # field printed. Release, not debug:
+                                                # the HPSS filters are the per-track
+                                                # cost and debug multiplies them.
+cargo run --release --features eval --bin keystone-eval -- <giantsteps dir>
 cargo bench --bench decode                      # the decode budget
 ```
 
@@ -121,6 +127,9 @@ src-tauri/              Rust backend
       renamer.rs        Journal-first renames
       peaks.rs          Streaming waveform peaks, cached on disk by content hash
     analysis/           The engine. S0..S12, see below
+      pipeline.rs       S1..S11 for one track — the ONLY place the order lives
+      decode/           S1: open (probe + audio region), stream, rate, levels
+      frontend/         Shared DSP: stft, banks, hpss, curves, spectrum
       spectral/         S2 + S3: stft, whitening, tuning, vqt, chroma
       key/              S4: template + skey voters, profiles, chunks, fuse
       camelot.rs        S5: key -> wheel position + the compatibility set
@@ -129,6 +138,9 @@ src-tauri/              Rust backend
       structure/        S9: strong-beat features, SSMs, boundaries, regions
       energy/           S10: features, loudness, frozen constants, score
       cues/             S11: filters, roles, assign, coverage
+      chroma.rs         S2 and S3 under the names the rest of the engine calls
+      tuning.rs         them by. Re-exports of spectral/, never a second
+                        implementation — see "One implementation" below
       version.rs        ANALYSIS_VERSION and ENERGY_MODEL_VERSION
     tags/               Read, write, rename, retag, backup, verify
     export/             safety/ first, then rekordbox/, traktor/, serato/ (v1.1)
@@ -196,17 +208,22 @@ mtime but not audio and must not cost a re-analysis.
 
 ## The analysis pipeline, in order
 
-One decode feeds every stage. Decode is roughly 90% of per-track cost, so the only
-optimisation that matters at this level is not decoding twice. **Never hold a decoded
-track longer than the stage that needs it** — a 10-minute 48 kHz stereo f32 buffer is
-230 MB, and eight workers hold eight.
+One decode feeds every stage, so the only optimisation that matters at this level is
+not decoding twice. **Never hold a decoded track longer than the stage that needs it** —
+a 10-minute 48 kHz stereo f32 buffer is 230 MB, and eight workers hold eight.
 
-The order is **not rearrangeable**. `analysis/mod.rs` owns it.
+Decode is roughly 90% of per-track cost *on paper*. Measured through the finished
+pipeline it is the smaller half: the structure stage's HPSS median filters cost more.
+That is a note for whoever sizes the queue, not a licence to decode twice.
+
+The order is **not rearrangeable**. `analysis/pipeline.rs` owns it — `analysis/mod.rs`
+is the module tree and the shared `AnalysisContext`, and the two are separate files
+because a sequence and a module tree change for different reasons.
 
 | Stage | Does | Lives in |
 |---|---|---|
 | S0 | Walk, per-path id, pending row | `core/scanner.rs`, `core/indexer.rs` |
-| S1 | Decode once → mono 44.1 k + 22.05 k, true peak, clipped count, streamed peaks | `analysis/decode.rs`, `core/peaks.rs` |
+| S1 | Decode once → mono 44.1 k, 22.05 k only when a model session exists, true peak, clipped count, streamed peaks | `analysis/decode/`, `core/peaks.rs` |
 | S2 | **Tuning estimate** in cents, and the corrective resample | `analysis/spectral/tuning.rs` |
 | S3 | 36-bin HPCP + per-strong-beat 12-bin chroma | `analysis/spectral/chroma.rs` |
 | S4 | **Key** — two voters fused, confidence, runner-up, ambiguity flag | `analysis/key/` |
@@ -218,6 +235,117 @@ The order is **not rearrangeable**. `analysis/mod.rs` owns it.
 | S10 | **Energy 1–10** over the core region | `analysis/energy/` |
 | S11 | Eight cue points, assigned by role | `analysis/cues/` |
 | S12 | Persist through the single writer task, batched | `jobs/writer.rs` |
+
+### The decode path, and the single-pass rule
+
+`analysis/decode/` is S1. It has three entry points and they are not
+interchangeable:
+
+- **`probe`** is header-only. It is cheap enough to run during the walk, which is why
+  the table can show duration and bitrate before anything has been analysed.
+- **`audio_region`** returns the byte offset and length of the audio payload. This
+  exists so the content hash can skip the tag block: ID3 sits at the *head* of an MP3,
+  so hashing the first bytes of the file means Keystone's own re-tag pass changes every
+  hash and silently wipes the analysis cache it just filled. It looks like it works
+  right up until the first re-tag. `pipeline.rs` hashes through
+  `hasher::hash_audio_region`, never over file bytes.
+- **`decode`** is the one pass. Arithmetic-mean downmix to mono, rubato for the rate
+  conversion, and true peak plus the clipped-sample count accumulated *in the same
+  loop*. Waveform peaks accumulate in that loop too when asked, which keeps them
+  O(target buckets) rather than O(track).
+
+Two rates, and only one of them is unconditional. `ANALYSIS_SAMPLE_RATE` is 44,100 and
+everything reads it; `KEY_SAMPLE_RATE` is 22,050, fixed by the S-KEY graph rather than
+chosen, and `DecodeOptions::want_key_rate` is set from `ctx.skey.is_some()`. The second
+buffer is the most expensive thing in a decode after the first, only the model voter
+reads it, and there is no bundled graph — **no session, no buffer.**
+
+The single-pass rule has a second half that is easy to lose: *one* decode, and the
+buffers die as early as possible. `pipeline.rs` scopes the key stage so the
+tuning-corrected copy and the 22.05 kHz buffer are both released before S9 materialises
+three spectrograms over the same track, and `key_stage` takes `mono_22050` **by value**
+precisely because it is the last reader — returning it would hold a second copy of the
+track alive through the memory high-water mark. S12 is deliberately *not* in
+`analyze_track`: eight workers competing for the single SQLite writer would spend the
+per-track budget in busy retries, so persistence is the caller's through `jobs/writer.rs`.
+
+The symphonia pin is **0.5 on purpose.** The proven streaming-decode shape is a 0.5 call
+site and 0.6 redesigned the audio primitives; the port is its own task, paid for once.
+This module is also meant to be lifted into a crate shared with Capstone, so it must not
+reach for anything Keystone-specific beyond the error type.
+
+`benches/decode.rs` wants `KEYSTONE_BENCH_CORPUS` pointed at twenty real tracks spanning
+MP3, AIFF, FLAC and M4A. Without it **it reports that it was skipped rather than
+inventing a number from synthetic audio**, which would measure the wrong thing. Keep
+that behaviour.
+
+### The shared front end: why 4096/512 and a 17x17 HPSS
+
+`analysis/frontend/` holds the STFT, the filterbanks, HPSS and the band splits —
+everything onsets, structure and energy have in common, so none of them recomputes a
+spectrogram another already has. `structure/spectra.rs` is the one caller that chooses
+the transform size, and it chooses `N_FFT = 4096`, `HOP = 512` at 44.1 kHz.
+
+- **4096, not 2048.** The 84-bin structure vector starts at C1 (32.7 Hz). A 2048-point
+  window puts only one FFT bin below 43 Hz, which collapses the kick band every
+  structure feature depends on.
+- **Hop 512** is S9's stated hop: 11.6 ms a frame.
+- **Materialised, not streamed**, unlike the key path's front end. A self-similarity
+  matrix is not expressible as one pass over frames — S9 and S10 read the same
+  spectrogram repeatedly and along both axes. The cost is real and known: a five-minute
+  track at 4096/512 is 25,800 frames of 2,049 bins, ~212 MB, and three of those
+  matrices exist at once. There is **exactly one** per track for that reason.
+- **The window convention is a parameter, never a default.** Symmetric Hann sums to
+  `(n-1)/2` and periodic sums to `n/2`; a stage that windows with one and scales as if
+  it used the other is wrong by that ratio in *every* magnitude it produces. Periodic
+  plus `normalize_by_sqrt_n` is what the Beat This! front end expects and is wrong for
+  everything else. Scratch buffers are allocated once per call, not per frame — 25,800
+  allocations a track times eight workers is the alternative.
+- **Filterbanks are sparse, never a dense matmul.** The same spectrogram measured 45 ms
+  through the sparse shape against 1.07 s through a dense multiply. A 24x penalty for a
+  two-line difference.
+
+HPSS (Fitzgerald 2010, Driedger's soft masks) runs at **17 frames x 17 bins**, both
+forced odd so the median has a true centre:
+
+- **17 frames is 198 ms** at hop 512 — long enough that a kick or snare is a clear
+  outlier in the time median, short enough that a chord change two frames later is not
+  smeared into the harmonic component. Longer and a filter sweep stops looking
+  harmonic; shorter and a 200 ms tom roll starts to.
+- **17 bins is 183 Hz** at 4096/44.1 kHz — wider than the few bins a single partial
+  occupies, which is the entire mechanism that makes a partial an outlier. It is also
+  the method's limit in the bass: below ~180 Hz a bassline's harmonics are spaced
+  closer than the filter is wide, so some bass leaks into the percussive component.
+  **Widening the filter makes that worse, not better**, since it then spans more
+  harmonics still. The kick band is where this separation is weakest, and the
+  band-limited flux features exist alongside it for exactly that reason.
+- **Masks are built from the squared medians**, soft rather than binary, so the two
+  components sum to exactly 1 cell by cell. S10's `perc / (perc + harm)` is only a
+  ratio of the mix if `harmonic + percussive == magnitude`.
+- **It is the per-track high-water mark in time as well as memory.** 21 million medians
+  per minute of audio at 4096/512. Both passes walk the spectrogram row-wise: measured
+  per minute of audio on one M-series core, release build, 1.58 s column-wise, 1.04 s
+  row-wise, 0.72 s row-wise with the incremental window update. Even so it is ~3.6 s of
+  a five-minute track's budget. **The way to close that gap is to hand this stage fewer
+  bins, which is the caller's decision, not to micro-optimise the filter.** Measure
+  before raising analysis concurrency on a small machine.
+
+### One implementation, two paths to it
+
+`analysis/chroma.rs` and `analysis/tuning.rs` were a second, independent copy of S2 and
+S3: the same function names carrying `todo!()`, sitting beside the finished
+`spectral::` implementations and reachable from the path the product used, while the
+working code was reachable only from `spectral::`. The rhythm trio had the same
+pathology earlier. They are now **re-exports plus their own tests**, reached through the
+alias on purpose so the assertions fail if anyone ever replaces one with a fresh
+implementation.
+
+Finishing a copy is worse than deleting it, and S3 is the worked example: the duplicate
+`Pcp` had neither `is_empty` nor `rotate`, so it could not express "no answer" and could
+not apply the detune at all, and its `fold_to_12` grouped sub-bins as `i / 3` rather
+than the centred `(i + 1) / 3` — a third of a semitone of misalignment, enough to rank
+B above G on a C major triad. **Never implement a stage a second time because a
+plausible name is empty. Alias it or delete it.**
 
 ### Why tuning is estimated before chroma and key
 
@@ -240,6 +368,25 @@ shows, and the residual still present in the buffers is separate. Collapsing the
 breaks one of the two — correcting against a residual of zero on an uncorrected buffer
 leaves the detune in the chroma, and reporting the residual instead of the measurement
 tells a user with a vinyl rip that their track is at A440.
+
+**Two routes out of S2, and the residual is what tells S3 which one was taken.** Past
+`CORRECTION_THRESHOLD_CENTS` the buffer is resampled and S3 is handed a residual of
+zero; below it the buffer is untouched and S3 is handed the cents, which it applies by
+rotating the bin grid (`detune_bin_shift`). Both must land on the same bin, and
+`analysis/chroma.rs`'s tests assert exactly that on a note detuned by one whole
+sub-bin, plus that the *uncorrected* vector really is on the wrong bin — otherwise
+neither path has proved anything.
+
+The `concentration` field is the third thing S2 owes, and it is why the estimate is not
+just a number: unpitched material scores below `MIN_CONCENTRATION` and **never asks to
+be resampled**. A `cents` value with nothing qualifying it is precisely how percussion
+ends up transposing a track.
+
+**Measured, on 1,056 real files** (`docs/ACCURACY.md` §7): median −2.5 cents, quartiles
+−6.8 / +1.2, range −33.4 to +33.1, and **189 files (17.9%) beyond ±20 cents.** So S2 is
+doing real work on roughly one file in six of a real DJ library, which is worth knowing
+given that both Faraldo and Sha'ath measured no aggregate gain on digitally-produced
+EDM. That corpus is not all digitally-produced EDM, and neither is the audience's.
 
 ### Why key is inferred per chunk
 
@@ -400,11 +547,33 @@ automatically after processing. So:
   crash between the rename and the row update otherwise leaves the table pointing at
   files that have already moved.
 - Every run is a **dry-run preview first**, with an undo after.
-- The hazards are all silent-wrong-behaviour rather than errors, and each has a test:
-  case-only renames via a staging name (APFS is case-insensitive), NFD vs NFC
-  comparison (macOS hands you NFD), idempotence (`Track - 8A - 8A` must be impossible),
-  Windows-illegal characters and reserved names, and the 255-byte component limit
-  truncating the **original** segment, never the key/tempo suffix.
+- The hazards are all silent-wrong-behaviour rather than errors. Each one is pinned by
+  a test in `core/renamer_apply_tests.rs`, which drives the wired `plan`/`apply` pair
+  against a real database and a real directory rather than the rules in isolation —
+  that seam, where a name composed from a row has to end up agreeing with a directory
+  entry, is where the two halves meet. The six cases, by the hazard they pin:
+
+  | Hazard | Test |
+  |---|---|
+  | APFS is case-insensitive, so a case-only rename goes via a staging name | `a_case_only_rename_lands_and_the_row_follows_it` |
+  | ...and a crash *between* its two steps must still be recoverable | `recovers_a_case_only_rename_interrupted_between_its_two_steps` |
+  | macOS hands back NFD; only a normalised compare says it is one file | `an_nfd_spelling_of_the_composed_name_is_not_a_rename` |
+  | Idempotence — `Track - 8A - 128 - 8A - 128.mp3` must be impossible | `a_key_and_tempo_suffix_can_never_be_applied_twice` |
+  | Windows-illegal characters and reserved device names | `illegal_characters_never_reach_the_disk` |
+  | The 255-byte component limit truncates the **original**, never the suffix | `the_component_limit_truncates_the_original_and_keeps_the_suffix` |
+
+- The naming rules and the move itself are implemented **once**, in
+  `tags/rename/compose.rs` and `tags/rename/paths.rs`, and re-exported from
+  `core/renamer.rs` rather than written a second time. What `core/renamer.rs` owns is
+  the half that talks to the database: `plan` is the wired entry point, `apply` is
+  journal-first through the repository, and `recover_journal` is what `lib.rs` replays
+  at launch. `original_filename` is what makes the idempotence strip exact.
+- Two traps in that split. The journal goes through `db/track_repo/journal.rs` because
+  all SQL belongs in `db/`, so **`tags/rename/journal.rs` predates it, writes `file_ops`
+  with its own inline SQL, and is called from nowhere** — do not wire it back in. And
+  `STAGING_PREFIX` is spelled in both `core/renamer.rs` and `tags/rename/paths.rs`
+  because `paths` keeps its staging name private; if those two ever drift, an
+  interrupted case-only rename becomes unrecoverable in silence.
 
 The same journal-first, backup-first, verify-after discipline governs tag writes and
 cue export. `tags/write.rs` is copy-modify-verify-rename with mtime restoration, and
@@ -466,6 +635,16 @@ order is enforced by `export::run`, not by documentation:
 **Keystone publishes no accuracy number until the gate in `docs/ENGINE.md` §7.1 is
 met,** and it does not claim to beat Mixed In Key. The bar is 75.70 MIREX weighted /
 69.37% exact on GiantSteps, and nothing openly licensed beats it today.
+
+**The gate has not been run.** GiantSteps+ is not on this machine, so no number anywhere
+in this repository is an accuracy figure. What *has* been run is `docs/ACCURACY.md`:
+1,063 real files from one DJ's library, scored against the Camelot labels Mixed In Key
+wrote into their filenames. That measures **agreement with a competitor**, where neither
+program is known to be right, and it is not comparable with the 75.70 or with the 76.0
+gate — different corpus, different reference, different quantity. Read that document's
+§0 before quoting anything out of it, and read §4 first when it is re-run: a weighted
+total that improves while 88% of the library still shows no key badge has not improved
+anything a user can see.
 
 The harness reports all five MIREX categories plus exact match, mode accuracy and
 key-signature accuracy **separately** — never just the weighted total. GiantSteps is
@@ -556,25 +735,43 @@ Tauri icon set was generated. The app's own inline marks are
 Everything below is an explicit `todo!("owes: …")` in the tree, so a stub announces
 itself at runtime rather than returning a plausible wrong answer.
 
-- **`analysis/decode.rs`** — the one shared decode pass, the probe, and the audio-region
-  offset. Nothing downstream can run on a real file until this lands, and the
-  `criterion` decode benchmark is what sizes the whole queue.
-- **`analysis/mod.rs::analyze_track`** — the S1..S11 orchestration itself.
-- **`analysis/frontend.rs`** — the shared STFT / filterbank / HPSS materialisation.
-  `structure/spectra.rs` calls into it, so S9, S10 and S11 are implemented and unit
-  tested against synthesised features but cannot yet be driven from audio.
+**S1 to S11 now run on a real file.** `analysis/mod.rs::analyze_track` decodes once and
+carries one track through tuning, chroma, key, Camelot, onsets, tempo, the grid,
+downbeats, structure, energy and cues; `jobs/writer.rs` persists the result and
+`eval::run` scores an annotated corpus off disk. `tests/pipeline.rs` is the regression
+guard on the seam: synthesised audio, written as a real container, opened by symphonia
+and asserted on as a whole `AnalysisResult`. Two stubs remain by decision:
+
 - **`analysis/key/skey.rs`** — the ONNX session. The bundled graph is not in
-  `src-tauri/resources/` yet, so **the key stage currently runs the template voter
-  alone**. The label order and its two anchors are already tested.
-- **`analysis/chroma.rs` and `analysis/tuning.rs` are dead shells.** The live
-  implementations are `analysis/spectral/chroma.rs` and
-  `analysis/spectral/tuning.rs`. This is the same hazard `analysis/mod.rs` describes for
-  the rhythm modules — a second, unimplemented copy that compiles and does nothing, with
-  every `todo!()` reachable from a plausible name. **Delete them, or make them
-  re-exports; do not implement them a second time.**
-- **`core/renamer.rs`** — the plan/apply pair and the five SPEC.md patterns. The journal
-  and the path hazards are done and tested in `tags/rename/`.
+  `src-tauri/resources/` yet, so **the key stage runs the template voter alone**, and
+  `analyze_track` skips the 22.05 kHz decode buffer entirely when there is no session to
+  feed it. The label order and its two anchors are already tested. v1.1 research track.
 - **`export/serato/`** — v1.1 by design.
+
+Not stubs, but not calibrated, which is the same hazard wearing a number:
+
+- **`key/fuse.rs`'s `SPREAD_FLOOR` / `SPREAD_FULL` were fitted on synthetic chords and
+  read ~0 on real records.** Ten tracks from a commercial house crate came back with the
+  right Camelot number on seven and a confidence of 0.00-0.24 on all ten, so every one
+  tripped `AMBIGUOUS_CONFIDENCE_FLOOR` and the badge the product is built around never
+  appears. The constants' own comment says "provisional until calibrated on a real
+  corpus" — this is that bill. Calibrate the evidence ramp on the GiantSteps run, not on
+  a handful of tracks.
+- **`energy/constants.rs`'s quantile ladder has no calibration corpus behind it.** The
+  same ten tracks scored 8, 9 or 10 — peak-time house really is high-energy, but a scale
+  that cannot separate those ten is not yet a scale. Fixing it is an
+  `ENERGY_MODEL_VERSION` bump, so do it once, from a corpus.
+- **`structure/spectra.rs` is the memory and time high-water mark.** 4096/512 over a
+  five-minute track is three ~200 MB matrices and the HPSS median filters dominate the
+  per-track cost. `frontend/hpss.rs`'s own header says the fix is fewer bins from the
+  caller, not a faster filter, and the caller is that file. Measure before raising
+  `effective_analysis_concurrency` on a small machine.
+- **`cargo test --features eval` takes ~20 minutes** in a debug build; `key_accuracy`
+  alone is ~14 of them. Plain `cargo test` is ~20 seconds, which is the one to run on an
+  edit.
+
+Still outstanding, unchanged:
+
 - **`tauri.conf.json` has an empty updater `endpoints` array.** Point it at the
   `latest.json` asset on the latest release before the first tagged build, or installs
   will never see an update and nothing will report an error.

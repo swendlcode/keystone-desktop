@@ -1111,6 +1111,77 @@ opt-in flagged non-standard** — do not invent a second control.
 
 ## 7. Risks, ranked, and how key accuracy gets measured
 
+### 7.0 Status: what has actually been measured, as of 2026-10-31
+
+This section was written before the engine existed. The engine now runs S1 to S11 on a
+real file, which means several of the tests below have been performed and the rest can
+now be told apart from the ones that have not. Read this before the plan underneath it.
+
+**The ship gate in §7.1 has not been run.** The 600-track GiantSteps+ set is not on this
+machine, and nothing has been scored against an independently annotated corpus. The
+gate stands exactly as written, untested, and **Keystone still publishes no accuracy
+number.**
+
+**What was run instead: `docs/ACCURACY.md`.** 1,063 real files from one DJ's library,
+scored against the Camelot labels Mixed In Key had written into their filenames, through
+the shipped `eval::mirex` scorer unmodified. That is **agreement with a competitor, not
+accuracy** — the references are Mixed In Key's opinion and where the two disagree
+neither is known to be right — and its figures are **not comparable with the 75.70 or
+the 76.0 gate**, which are scored against GiantSteps' human annotations. Different
+corpus, different reference, different quantity. The full method, every caveat and the
+reproduction commands are in that document; what belongs here is what it changes about
+the risks:
+
+- **The engine reads real audio end to end.** 1,062 of 1,063 files decoded and keyed; the
+  one failure was a truncated container, reported as such. Six more were keyed and then
+  refused by a later stage for want of a beat grid. Nothing was dropped silently.
+- **A real defect was found that synthetic testing could not see, and it is the
+  headline.** `key::fuse`'s `SPREAD_FLOOR` (0.08) and `SPREAD_FULL` (0.14) were fitted
+  on synthetic chords and read near zero on real records, so confidence collapses:
+  **exactly 0.000 on 64.3% of files, below the ambiguity floor on 88.4%.** The product
+  would show a DJ no key badge on almost their whole library. The answers underneath
+  those zeros are *not* bad — full club tracks in the lowest confidence band still match
+  Mixed In Key 54.91% exactly — so the ordering carries information and only the mapping
+  onto 0–1 is wrong. This is a calibration fault, it is the one unambiguous defect in the
+  run, and nothing else matters until it is fixed.
+- **The residual key error has a direction.** Over full-track answers with the right
+  letter, 21.7% sit one step clockwise (the dominant, +7 semitones) against 5.0% on the
+  subdominant — 4.3x asymmetry, so a per-track tie-break failure, not a constant
+  rotation (rotating every estimate by −7 drops full tracks from 71.00 to 19.90). The
+  runner-up is Mixed In Key's answer in 75% of those cases, which is the first real
+  evidence that the honest-ambiguity UI earns its place rather than merely sounding
+  honest.
+- **Material difficulty dominates everything.** Full club tracks against isolated
+  acapellas is 71.00 weighted versus 40.35. Risk 10 below has arrived on schedule.
+- **There is no minor bias.** Keystone's estimates are *less* minor than the reference
+  labels (0.788 against 0.894), so the `edmm` failure mode — post a good weighted score
+  by always answering minor — is not what is happening.
+- **Tempo is in materially better shape than key**, and is not where the remaining error
+  is: 88.29% integer-exact on full tracks with a 0.00–0.01 BPM median absolute error.
+  The Accuracy1-to-Accuracy2 gap is 4.00 points on full tracks and 12.38 on sparse-beat
+  vocals, which is §7.4's octave problem showing up exactly where it was predicted to.
+- **The measurement is stable.** 42 track identities present as two or more files
+  (usually an MP3 and an AIFF of the same recording) returned the same key on 42 of 42,
+  with a median tempo spread of 0.00 BPM. The engine is deterministic and codec-robust
+  across those pairs, so the disagreements are method differences and not run noise.
+- **Tuning does real work on roughly one file in six.** Median −2.5 cents, and 17.9% of
+  files beyond ±20 cents. Worth recording against §2's note that Faraldo and Sha'ath
+  both measured no aggregate gain on digitally-produced EDM: this corpus is not all
+  digitally-produced EDM.
+
+**Risk-by-risk deltas.** Numbering follows §7.2.
+
+| # | Change |
+|---|---|
+| 1 | Unchanged and still the deciding risk. **S-KEY has not been re-scored** — there is no bundled graph in the tree (`SkeySession::from_path` is `todo!()`), so everything measured so far is the template voter alone. Read `ACCURACY.md` §3 as a floor for the engine's eventual configuration, not as its score. |
+| 6 | Untouched. The energy quantile ladder still has no calibration corpus behind it, and the ten tracks spot-checked during the build scored 8, 9 or 10 — a scale that cannot separate those is not yet a scale. Fixing it is an `ENERGY_MODEL_VERSION` bump, so do it once, from a corpus. |
+| 8 | **Partly measured, and its premise is reversed.** The whole pipeline ran 1,063 files in 656 s wall at six workers in a release build on an M-series machine (~1.6 tracks/s sustained, so a 20,000-track library is roughly three and a half hours here — still over the line the risk was worried about). But decode is **not** the 90% the plan assumed: measured through the finished pipeline, the structure stage's HPSS median filters cost more. `frontend/hpss.rs` is ~3.6 s of a five-minute track. The `criterion` decode benchmark exists (`benches/decode.rs`) and **has not been run against a real multi-format corpus** — it needs `KEYSTONE_BENCH_CORPUS` and reports that it was skipped rather than inventing a figure from synthetic audio. |
+| 10 | **Arrived, as predicted.** Acapellas sit 30 weighted points below full club tracks, and five had no usable beat grid at all. A thin monophonic vocal may simply not have a key the 24-class taxonomy can carry; the honest output is a refusal, but it has to be a refusal the UI *explains* rather than the current silent all-zero confidence. The awkward-material fixture set is still not assembled. |
+| 12 | **Done and tested.** `core/renamer.rs` is journal-first through `db/track_repo/journal.rs`, with the preview as the undo and `recover_journal` replayed at launch. All five named hazards are pinned by tests in `core/renamer_apply_tests.rs`, which drive the wired `plan`/`apply` pair against a real database and a real directory, plus a sixth for a crash *between* the two steps of a case-only rename. |
+| 14 | Unchanged. **Every timing in this document and in `ACCURACY.md` is from an M-series Mac.** There is still no Windows measurement, and Windows is roughly two thirds of installs. |
+
+Risks 2, 3, 4, 5, 7, 9, 11 and 13 are unchanged by this run.
+
 ### 7.1 The key-accuracy gate — exactly how we measure it
 
 This is the stated goal, so it is a release gate, not a milestone.
@@ -1132,7 +1203,9 @@ This is the stated goal, so it is a release gate, not a milestone.
 - **The number to beat: 75.70 MIREX weighted / 69.37% exact.** Ship gate: the fused
   engine must reach **≥ 76.0 weighted on the 600-track set** before Keystone publishes any
   accuracy claim. Below that, ship the product and **publish no number** — publishing one
-  without naming the measure is precisely what we criticise MIK for.
+  without naming the measure is precisely what we criticise MIK for. **Status: not run.**
+  The corpus is not on this machine, the gate is neither met nor tested, and the
+  agreement run in `docs/ACCURACY.md` does not substitute for it.
 - **Licence boundary:** evaluating against CC BY-SA data does not infect MIT code.
   **Deriving and shipping key profiles from it does** raise ShareAlike, so profiles come
   from the papers' descriptions or the owner's own annotated library.
@@ -1140,7 +1213,10 @@ This is the stated goal, so it is a release gate, not a milestone.
   community S-KEY ONNX export ourselves to confirm the claimed 72.1 — nobody has done
   that, and the export is a community conversion, not an official Deezer release
   (author-reported torch parity <4e-6, and it does reproduce the repo's expected
-  `D# Major` on the reference file).
+  `D# Major` on the reference file). **Status: the harness is built** (`src/eval/`,
+  feature `eval`; `eval/mirex.rs` has eight tests and was cross-checked against an
+  independent reimplementation, which caught one bug in the checking script and none in
+  the scorer). **The S-KEY re-score has not happened** — there is no graph in the tree.
 
 **Expected trajectory, stated as expectations not promises:** S-KEY alone ~72.1;
 + tuning correction, no measured aggregate gain on EDM but tail insurance; + bgate

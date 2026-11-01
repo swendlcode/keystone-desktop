@@ -43,6 +43,16 @@ Stated plainly, because the alternative is finding out later.
   does not claim to beat Mixed In Key. Any figure would have to be measured on a public
   annotated set of real audio with the scoring method named, and that has not been done
   yet. When it is, the number and the method get published together or not at all.
+  There is one measurement in the repository — [docs/ACCURACY.md](docs/ACCURACY.md),
+  which reports how often Keystone's key agrees with Mixed In Key's own labels on one
+  private 1,063-track library — and it is agreement between two programs on one DJ's
+  collection, where neither is known to be right, so nothing in it is an accuracy figure
+  or comparable with any published one.
+- **The confidence scale is not calibrated yet, and you will see that.** The thresholds
+  behind the key badge were fitted on synthetic audio and read far too low on real
+  records, so on a real library most tracks currently show the relative pair rather than
+  a single key. The answer underneath is usually sound; the number grading it is not.
+  This is a known defect, not the honest-ambiguity feature working as intended.
 - **No writing into rekordbox's own database.** XML only.
 - **Nothing for material that is not broadly 4/4 and tempo-stable.** Live, acoustic,
   classical, swung and half-time tracks get a low-confidence result or an honest "could
