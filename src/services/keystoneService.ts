@@ -81,6 +81,13 @@ export const keystoneService = {
     return invoke('scan_folder', { path });
   },
 
+  /** Whatever was dropped on the window. Folders become watched roots; loose
+      audio files are indexed on their own without watching their parent.
+      Returns the number of loose files queued, not counting folder contents. */
+  addDroppedPaths(paths: string[]): Promise<number> {
+    return invoke('add_dropped_paths', { paths });
+  },
+
   cancelScan(): Promise<void> {
     return invoke('cancel_scan');
   },

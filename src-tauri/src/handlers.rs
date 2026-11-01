@@ -15,6 +15,7 @@ macro_rules! keystone_invoke_handler {
         tauri::generate_handler![
             // library
             $crate::commands::library_commands::add_watched_folder,
+            $crate::commands::library_commands::add_dropped_paths,
             $crate::commands::library_commands::remove_watched_folder,
             $crate::commands::library_commands::get_watched_folders,
             $crate::commands::library_commands::scan_folder,
