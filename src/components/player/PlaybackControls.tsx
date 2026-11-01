@@ -41,12 +41,19 @@ export function PlaybackControls({ totalS }: { totalS: number }) {
         aria-label={isPlaying ? 'Pause' : 'Play'}
         disabled={!hasTrack}
         onClick={() => (isPlaying ? pause() : resume())}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-keystone-lime text-[color:var(--color-on-accent)] transition-colors hover:bg-[color:var(--color-accent-hover)] disabled:opacity-30"
+        // Flat and icon-only, the way Stack's transport reads. A filled accent
+        // disc made the one control that is pressed least the loudest thing on
+        // the screen, and fought the waveform beside it for attention.
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors disabled:opacity-30 ${
+          isPlaying
+            ? 'text-keystone-lime'
+            : 'text-gray-400 hover:text-keystone-white'
+        }`}
       >
         {isPlaying ? (
-          <Pause size={16} color="currentColor" variant="Bold" />
+          <Pause size={16} color="currentColor" variant="Linear" />
         ) : (
-          <Play size={16} color="currentColor" variant="Bold" />
+          <Play size={16} color="currentColor" variant="Linear" />
         )}
       </button>
 

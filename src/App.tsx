@@ -2,6 +2,8 @@ import { lazy, Suspense } from 'react';
 import { TitleBar } from './components/layout/TitleBar';
 import { Sidebar } from './components/layout/Sidebar';
 import { MainPanel } from './components/layout/MainPanel';
+import { StatusBar } from './components/layout/StatusBar';
+import { DropOverlay } from './components/layout/DropOverlay';
 import { PlayerBar } from './components/player/PlayerBar';
 import { TrackContextMenu } from './components/menu/TrackContextMenu';
 import { useUiStore } from './stores/uiStore';
@@ -43,6 +45,8 @@ export default function App() {
           </Suspense>
         </MainPanel>
       </div>
+      <StatusBar />
+      <DropOverlay />
       {/* One menu for every table: its anchor is `uiStore.contextMenu`, which
           both the library and the tag table write to. Mounted here rather than
           per table so a right-click cannot leave two open. */}

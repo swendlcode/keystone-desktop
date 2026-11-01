@@ -1,6 +1,5 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { MouseEvent } from 'react';
-import { Logo } from '../ui/Logo';
 import { HamburgerMenu, Moon, SearchNormal, Setting2, Sun1, Tag } from '../ui/icons';
 import { Input } from '../ui/Input';
 import { useUiStore, type ActiveView } from '../../stores/uiStore';
@@ -41,7 +40,11 @@ export function TitleBar() {
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
 
   return (
-    <div className="relative flex h-12 shrink-0 items-center gap-3 border-b border-gray-700 bg-gray-900 px-3">
+    // pl-[76px] clears the macOS traffic lights, which the Overlay title bar
+    // draws at x:16 over whatever is beneath them. The mark used to sit here
+    // and was rendered underneath the close button; it lives in the StatusBar
+    // now, where nothing is drawn over it.
+    <div className="relative flex h-12 shrink-0 items-center gap-3 border-b border-gray-700 bg-gray-900 pl-[76px] pr-3">
       <div
         data-tauri-drag-region
         onMouseDown={startDrag}
@@ -57,7 +60,6 @@ export function TitleBar() {
         >
           <HamburgerMenu size={18} color="currentColor" variant="Linear" />
         </button>
-        <Logo size={22} />
       </div>
 
       <nav className="z-10 flex items-center gap-1">

@@ -35,9 +35,12 @@ export function Toggle({
           checked ? 'bg-keystone-lime' : 'bg-gray-600'
         }`}
       >
+        {/* Anchored left, not translated from a static position. Without
+            `left-0.5` the knob starts wherever the inline flow puts it, which
+            on a 36px track pushed it past the end and over the label. */}
         <span
-          className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform"
-          style={{ transform: `translateX(${checked ? 18 : 2}px)` }}
+          className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-keystone-white shadow-sm transition-transform"
+          style={{ transform: `translateX(${checked ? 16 : 0}px)` }}
         />
       </button>
       {label && <span className="text-xs text-gray-300">{label}</span>}

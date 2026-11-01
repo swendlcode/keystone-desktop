@@ -82,6 +82,8 @@ export {
   ArrowRight2,
   More,
   CloseCircle,
+  Coffee,
+  DocumentUpload,
   Refresh,
   Setting2,
   SliderHorizontal,
