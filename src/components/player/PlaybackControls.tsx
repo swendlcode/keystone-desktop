@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
 import {
   Next,
-  Pause,
   Play,
   Previous,
   SearchZoomIn,
   SearchZoomOut,
+  Stop,
 } from '../ui/icons';
 import { MAX_ZOOM, usePlayerStore } from '../../stores/playerStore';
 import { formatTime } from '../../utils/formatters';
@@ -46,7 +46,13 @@ export function PlaybackControls() {
         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-keystone-lime text-[color:var(--color-on-accent)] shadow-lg shadow-keystone-lime/20 transition-colors hover:bg-[color:var(--color-accent-hover)] disabled:bg-gray-700 disabled:text-gray-500 disabled:shadow-none"
       >
         {isPlaying ? (
-          <Pause size={18} color="currentColor" variant="Linear" />
+          // A square, not the two-bar pause glyph. The button still pauses —
+          // it calls `pause()`, holds the playhead and resumes from there —
+          // so the square is the shape asked for, not a change of behaviour.
+          // Worth knowing if the icon ever tempts someone to wire it to
+          // `stop()`, which rewinds, and is the bug the note in `playerStore`
+          // is about.
+          <Stop size={17} color="currentColor" variant="Linear" />
         ) : (
           // Nudged right by a pixel: a triangle's visual centre is left of
           // its bounding box, so centring the box leaves it looking off.
