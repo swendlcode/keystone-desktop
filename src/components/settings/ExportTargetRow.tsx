@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
 import { Archive } from '../ui/icons';
 import { SettingNote } from './SettingSection';
+import { TargetMark } from './TargetMark';
 import {
   TARGET_LABEL,
   useExportBackups,
@@ -48,12 +49,15 @@ export function ExportTargetRow({
   return (
     <div className="flex flex-col gap-1.5 border-b border-gray-700 pb-3 last:border-0 last:pb-0">
       <div className="flex items-center justify-between gap-3">
-        <Checkbox
-          checked={enabled && !blocked}
-          disabled={blocked}
-          onChange={onToggle}
-          label={label}
-        />
+        <span className="flex min-w-0 items-center gap-2">
+          <TargetMark target={info.target} dimmed={blocked} />
+          <Checkbox
+            checked={enabled && !blocked}
+            disabled={blocked}
+            onChange={onToggle}
+            label={label}
+          />
+        </span>
         {!blocked && (
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" onClick={pickPath}>
