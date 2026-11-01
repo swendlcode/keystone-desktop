@@ -12,6 +12,8 @@ interface MenuProps {
 
 const WIDTH = 230;
 const ITEM_H = 28;
+const SEPARATOR_H = 9;
+const EDGE = 8;
 
 /**
  * A context menu with working submenus.
@@ -52,32 +54,60 @@ export function Menu({ x, y, items, onClose }: MenuProps) {
   );
 }
 
+/** Where a submenu wants to be, and where it should go if it will not fit. */
+interface Placement {
+  x: number;
+  y: number;
+  /** The parent panel's left edge, so a submenu can open leftwards instead. */
+  flipX: number;
+}
+
 function MenuList({
   items,
   x,
   y,
+  flipX,
   onClose,
 }: {
   items: MenuItem[];
   x: number;
   y: number;
+  /** Fall back to opening leftwards from here when the right has no room. */
+  flipX?: number;
   onClose: () => void;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
-  const [childAt, setChildAt] = useState({ x: 0, y: 0 });
+  const [childAt, setChildAt] = useState<Placement>({ x: 0, y: 0, flipX: 0 });
 
-  // A right-click near the bottom of a 20,000-row table is the normal case, so
-  // the panel is pulled back inside the viewport rather than drawn off it.
-  const height = items.length * ITEM_H + 12;
-  const left = Math.min(x, window.innerWidth - WIDTH - 8);
-  const top = Math.min(y, Math.max(8, window.innerHeight - height - 8));
+  const separators = items.filter((i) => i.separatorBefore).length;
+  const height = items.length * ITEM_H + separators * SEPARATOR_H + 12;
+
+  // Never taller than the window. The energy submenu is ten rows, and on a
+  // short window a clamped-but-oversized panel just runs off the bottom with
+  // its last options unreachable.
+  const maxHeight = window.innerHeight - EDGE * 2;
+
+  // Rightwards if it fits; otherwise leftwards from the parent's edge. The
+  // previous version only clamped x, which on a menu opened near the right
+  // of the window slid the submenu back ON TOP of its own parent — covering
+  // the row that opened it and every row below.
+  const fitsRight = x + WIDTH <= window.innerWidth - EDGE;
+  const left =
+    fitsRight || flipX == null
+      ? Math.max(EDGE, Math.min(x, window.innerWidth - WIDTH - EDGE))
+      : Math.max(EDGE, flipX - WIDTH + 6);
+
+  const top = Math.max(
+    EDGE,
+    Math.min(y, window.innerHeight - Math.min(height, maxHeight) - EDGE),
+  );
   const open = items.find((i) => i.id === openId);
 
   return (
     <div
       role="menu"
-      style={{ top, left, width: WIDTH }}
-      className="fixed z-50 rounded-lg border border-gray-700 bg-gray-900 py-1 shadow-2xl shadow-black/50"
+      style={{ top, left, width: WIDTH, maxHeight }}
+      className="fixed z-50 overflow-y-auto overscroll-contain rounded-lg border border-gray-700 bg-gray-900 py-1 shadow-2xl shadow-black/50"
     >
       {items.map((item) => (
         <div key={item.id}>
@@ -86,7 +116,9 @@ function MenuList({
             item={item}
             onHover={(rect) => {
               setOpenId(item.items ? item.id : null);
-              if (item.items) setChildAt({ x: rect.right - 6, y: rect.top - 5 });
+              if (item.items) {
+                setChildAt({ x: rect.right - 6, y: rect.top - 5, flipX: rect.left });
+              }
             }}
             onSelect={() => {
               if (item.items) return;
@@ -98,7 +130,13 @@ function MenuList({
       ))}
 
       {open?.items && (
-        <MenuList items={open.items} x={childAt.x} y={childAt.y} onClose={onClose} />
+        <MenuList
+          items={open.items}
+          x={childAt.x}
+          y={childAt.y}
+          flipX={childAt.flipX}
+          onClose={onClose}
+        />
       )}
     </div>
   );

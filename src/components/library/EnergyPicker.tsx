@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { EnergyValue } from '../library/TrackValues';
+import { EnergyValue } from './TrackValues';
 import { useSetTrackEnergy } from '../../hooks/useLibrary';
 import type { Track } from '../../types';
 
@@ -54,7 +54,12 @@ export function EnergyPicker({ track }: { track: Track }) {
         aria-haspopup="dialog"
         aria-expanded={open}
         title="Click to set the energy by hand"
-        onClick={() => setOpen((v) => !v)}
+        onPointerDown={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
         className="rounded transition-opacity hover:opacity-80"
       >
         <EnergyValue track={track} />

@@ -12,6 +12,7 @@ import { PAGE_SIZE, useSetRating } from '../../hooks/useLibrary';
 import { useEffectiveSettings } from '../../hooks/useSettings';
 import { useLibraryStore } from '../../stores/libraryStore';
 import { usePlayerStore } from '../../stores/playerStore';
+import { useUiStore } from '../../stores/uiStore';
 
 interface TrackTableProps {
   window: TrackWindow;
@@ -39,9 +40,10 @@ export function TrackTable({ window: win, onPageChange }: TrackTableProps) {
   const rows = useRowInteraction(win, settings?.playAutomatically ?? false);
   useSelectAll(useMemo(() => win.loaded.map((t) => t.id), [win.loaded]));
 
+  const columnOrder = useUiStore((s) => s.columnOrder);
   const columns = useMemo(
-    () => visibleColumns(settings?.columns),
-    [settings?.columns],
+    () => visibleColumns(settings?.columns, columnOrder),
+    [settings?.columns, columnOrder],
   );
   const template = useMemo(() => gridTemplate(columns), [columns]);
 

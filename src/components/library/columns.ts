@@ -38,10 +38,19 @@ export const COLUMN_SPECS: Record<TrackColumn, ColumnSpec> = {
   comment: { width: 140, align: 'left', flex: 2, sort: null },
 };
 
-/** The visible columns, in `COLUMN_ORDER`. */
-export function visibleColumns(columns: ColumnVisibility | undefined): TrackColumn[] {
+/**
+ * The visible columns, in the user's order.
+ *
+ * Two separate ideas, deliberately kept apart: *which* columns are shown is a
+ * Setting that lives in the database, and *where* they sit is a layout
+ * preference in `uiStore`. Hiding a column should not forget where it was.
+ */
+export function visibleColumns(
+  columns: ColumnVisibility | undefined,
+  order: readonly TrackColumn[] = COLUMN_ORDER,
+): TrackColumn[] {
   if (!columns) return [];
-  return COLUMN_ORDER.filter((c) => columns[c]);
+  return order.filter((c) => columns[c]);
 }
 
 /**

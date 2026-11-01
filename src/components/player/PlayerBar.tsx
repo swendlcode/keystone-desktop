@@ -2,6 +2,7 @@ import { PlaybackControls, WaveformMeta } from './PlaybackControls';
 import { TrackReadout } from './TrackReadout';
 import { VirtualPiano } from './VirtualPiano';
 import { WaveformView } from './WaveformView';
+import { PlaybackError } from './PlaybackError';
 import { usePlayer } from '../../hooks/usePlayer';
 import { useEffectiveSettings } from '../../hooks/useSettings';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -55,8 +56,11 @@ export function PlayerBar() {
           The title is the one thing here that cannot be guessed from a
           fragment. */}
       <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2">
-        <span className="min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wide text-keystone-white">
-          {track ? trackLabel(track) : 'No track'}
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="truncate text-xs font-semibold uppercase tracking-wide text-keystone-white">
+            {track ? trackLabel(track) : 'No track'}
+          </span>
+          <PlaybackError />
         </span>
         {track && (
           <TrackReadout track={track} settings={settings} onSeek={seek} />

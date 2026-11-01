@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Keyboard } from '../ui/icons';
 import { CueStepper } from './CueStepper';
-import { EnergyPicker } from './EnergyPicker';
+import { EnergyPicker } from '../library/EnergyPicker';
 import { KeyPicker } from './KeyPicker';
 import { TempoValue } from '../library/TrackValues';
 import { useUiStore } from '../../stores/uiStore';

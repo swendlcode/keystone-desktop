@@ -12,9 +12,11 @@ const TEMPO_UNCERTAIN_BELOW = 0.5;
  * grid's residual, which `formatTempo` enforces — so the setting is passed
  * through rather than branched on here.
  *
- * A variable-tempo track is prefixed `~` and dimmed. The engine plan is
- * explicit that live, rubato and half-time material gets a low-confidence
- * result rather than a confident wrong one, and this is where that lands.
+ * A variable-tempo or low-confidence reading is dimmed. It used to also be
+ * prefixed `~`, which put a character in a monospaced numeric column that is
+ * not part of the number — it broke the column's alignment and read as part
+ * of the value when copied or glanced at. The dimming carries the same
+ * meaning and the tooltip says which of the two it is.
  */
 export function TempoValue({
   track,
@@ -42,7 +44,6 @@ export function TempoValue({
             : undefined
       }
     >
-      {uncertain ? '~' : ''}
       {text}
     </span>
   );

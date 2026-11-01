@@ -38,6 +38,16 @@ interface PlayerStore {
   viewCentreS: number | null;
   /** Which cue slot the user is dragging, or null. Drives the marker hit test. */
   draggingCueSlot: number | null;
+  /**
+   * Why the last attempt to play made no sound, or null.
+   *
+   * Audio failures are silent by nature — a file the webview cannot decode
+   * and a bug in the transport look identical from the outside, which is a
+   * dead play button either way and no way to tell which. This is shown in
+   * the player bar so the reason is on screen rather than in a console
+   * nobody has open.
+   */
+  loadError: string | null;
 
   play: (track: Track, startAt?: number) => void;
   pause: () => void;
@@ -54,6 +64,7 @@ interface PlayerStore {
   zoomOut: () => void;
   setViewCentre: (seconds: number | null) => void;
   setDraggingCueSlot: (slot: number | null) => void;
+  setLoadError: (message: string | null) => void;
   clearCurrent: () => void;
 
   /** Registered by `usePlayer`, which owns the audio element. */
@@ -102,6 +113,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   zoom: 0,
   viewCentreS: null,
   draggingCueSlot: null,
+  loadError: null,
   seekTo: null,
 
   play: (track, startAt = 0) =>
@@ -112,6 +124,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       duration: 0,
       pendingStartAt: startAt,
       viewCentreS: null,
+      loadError: null,
     }),
 
   /** Hold the playhead. The spacebar and the transport's pause. */
@@ -185,6 +198,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     set((s) => ({ zoom: Math.max(0, s.zoom - 1), viewCentreS: null })),
   setViewCentre: (viewCentreS) => set({ viewCentreS }),
   setDraggingCueSlot: (draggingCueSlot) => set({ draggingCueSlot }),
+  setLoadError: (loadError) => set({ loadError }),
   clearCurrent: () =>
     set({ currentTrack: null, isPlaying: false, currentTime: 0, duration: 0 }),
 

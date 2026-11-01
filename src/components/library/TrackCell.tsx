@@ -1,7 +1,8 @@
 import { MusicSquare } from '../ui/icons';
 import { Rating } from '../ui/Rating';
 import { KeyResult } from './KeyResult';
-import { CueCountValue, EnergyValue, TempoValue } from './TrackValues';
+import { EnergyPicker } from './EnergyPicker';
+import { CueCountValue, TempoValue } from './TrackValues';
 import { useCoverArt } from './useCoverArt';
 import type { KeyNotation, TempoDecimals, Track, TrackColumn } from '../../types';
 import {
@@ -57,7 +58,12 @@ export function TrackCell({
       return <TempoValue track={track} decimals={decimals} />;
 
     case 'energy':
-      return <EnergyValue track={track} />;
+      // Editable in place, like the rating beside it. Energy is the reading
+      // most likely to be argued with — the scale's ordering was never
+      // validated against a human ear — and making it correctable only for
+      // the track currently playing meant auditioning a track to fix a
+      // number you could already see was wrong.
+      return <EnergyPicker track={track} />;
 
     case 'cuePoints':
       return <CueCountValue track={track} />;

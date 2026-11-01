@@ -84,12 +84,12 @@ interface DrawOptions {
    */
   width: number;
   height: number;
-  /** The average body, which is what gives a limited master any structure. */
+  /** Per-pixel peaks — the sharp layer, where each transient is its own spike. */
   playedColor: string;
   unplayedColor: string;
-  /** The peak envelope around the body, drawn behind it. */
-  playedPeakColor: string;
-  unplayedPeakColor: string;
+  /** The smoothed shape behind it, which carries the arrangement. */
+  playedGhostColor: string;
+  unplayedGhostColor: string;
   centreColor: string;
 }
 
@@ -105,6 +105,16 @@ const MIN_THICKNESS = 1;
  * because both are clipped by the frame rather than by the music.
  */
 const HEADROOM = 0.88;
+
+/**
+ * Half-width, in device pixels, of the window the ghost layer maxes over.
+ *
+ * Wide enough to bridge the gaps between kicks, so the ghost reads as the
+ * song's shape rather than as a blurred copy of the spikes in front of it;
+ * narrow enough that a breakdown still collapses instead of being filled in
+ * by the drop next to it.
+ */
+const GHOST_RADIUS_PX = 7;
 
 /** Repaints the whole canvas. There is no partial-invalidation path. */
 export function drawWaveform(
@@ -125,58 +135,99 @@ export function drawWaveform(
   // The envelope is measured once and painted twice, so the played and
   // unplayed halves are the same shape rather than two shapes that have to
   // agree at the seam.
-  const tops = new Float32Array(width);
-  const bottoms = new Float32Array(width);
-  const bodyTops = new Float32Array(width);
-  const bodyBottoms = new Float32Array(width);
-  const scale = mid * HEADROOM;
+  // Signed amplitudes first, so the ghost can be derived from them rather
+  // than measured a second time.
+  const hi = new Float32Array(width);
+  const lo = new Float32Array(width);
 
   for (let x = 0; x < width; x += 1) {
     const t0 = window.startS + (x / width) * spanS;
     const t1 = window.startS + ((x + 1) / width) * spanS;
     const peak = bucketPeak(level, t0 * bucketsPerSecond, t1 * bucketsPerSecond);
-    if (!peak) {
-      tops[x] = mid;
-      bottoms[x] = mid;
-      bodyTops[x] = mid;
-      bodyBottoms[x] = mid;
-      continue;
-    }
+    hi[x] = peak ? peak.max : 0;
+    lo[x] = peak ? peak.min : 0;
+  }
 
-    let top = mid - peak.max * scale;
-    let bottom = mid - peak.min * scale;
+  const ghostHi = slidingMax(hi, GHOST_RADIUS_PX);
+  const ghostLo = slidingMin(lo, GHOST_RADIUS_PX);
+
+  const scale = mid * HEADROOM;
+  const tops = new Float32Array(width);
+  const bottoms = new Float32Array(width);
+  const ghostTops = new Float32Array(width);
+  const ghostBottoms = new Float32Array(width);
+
+  for (let x = 0; x < width; x += 1) {
+    let top = mid - hi[x] * scale;
+    let bottom = mid - lo[x] * scale;
     if (bottom - top < MIN_THICKNESS) {
       top = mid - MIN_THICKNESS / 2;
       bottom = mid + MIN_THICKNESS / 2;
     }
     tops[x] = top;
     bottoms[x] = bottom;
-    bodyTops[x] = mid - peak.meanMax * scale;
-    bodyBottoms[x] = mid - peak.meanMin * scale;
+    ghostTops[x] = mid - ghostHi[x] * scale;
+    ghostBottoms[x] = mid - ghostLo[x] * scale;
   }
 
   // Clipped rather than decided per column, so the split lands on the exact
   // playhead instead of snapping to a pixel boundary.
   const playedPx = Math.min(Math.max(((playheadS - window.startS) / spanS) * width, 0), width);
 
-  const layers = (peakColor: string, bodyColor: string) => {
-    paintEnvelope(ctx, tops, bottoms, width, peakColor);
-    paintEnvelope(ctx, bodyTops, bodyBottoms, width, bodyColor);
+  // Ghost behind, detail in front. The ghost is a max over a window, so it
+  // bridges the gaps between kicks and draws the arrangement — the shape that
+  // tells you where the breakdown is from across the room. The sharp layer
+  // on top keeps every transient its own spike, which is what the ghost
+  // would otherwise smear away.
+  const layers = (ghostColor: string, detailColor: string) => {
+    paintEnvelope(ctx, ghostTops, ghostBottoms, width, ghostColor);
+    paintEnvelope(ctx, tops, bottoms, width, detailColor);
   };
 
-  layers(opts.unplayedPeakColor, opts.unplayedColor);
+  layers(opts.unplayedGhostColor, opts.unplayedColor);
 
   if (playedPx > 0) {
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, 0, playedPx, height);
     ctx.clip();
-    layers(opts.playedPeakColor, opts.playedColor);
+    layers(opts.playedGhostColor, opts.playedColor);
     ctx.restore();
   }
 
   ctx.fillStyle = opts.centreColor;
   ctx.fillRect(0, Math.round(mid), width, 1);
+}
+
+/**
+ * Running maximum over a window of +/- `radius` columns.
+ *
+ * Plain nested loops. The window is a handful of pixels wide and this runs on
+ * a few thousand columns four times a second, so a monotonic deque would be
+ * more code to read for no measurable difference.
+ */
+function slidingMax(src: Float32Array, radius: number): Float32Array {
+  const out = new Float32Array(src.length);
+  for (let i = 0; i < src.length; i += 1) {
+    const from = Math.max(0, i - radius);
+    const to = Math.min(src.length - 1, i + radius);
+    let best = src[from];
+    for (let j = from + 1; j <= to; j += 1) if (src[j] > best) best = src[j];
+    out[i] = best;
+  }
+  return out;
+}
+
+function slidingMin(src: Float32Array, radius: number): Float32Array {
+  const out = new Float32Array(src.length);
+  for (let i = 0; i < src.length; i += 1) {
+    const from = Math.max(0, i - radius);
+    const to = Math.min(src.length - 1, i + radius);
+    let best = src[from];
+    for (let j = from + 1; j <= to; j += 1) if (src[j] < best) best = src[j];
+    out[i] = best;
+  }
+  return out;
 }
 
 /**
@@ -208,21 +259,6 @@ interface ColumnPeak {
   /** Loudest excursion in the column — the outer envelope. */
   min: number;
   max: number;
-  /**
-   * Average excursion across the column's buckets — the inner body.
-   *
-   * This is the whole reason a waveform has shape. A track limited to within
-   * a hair of full scale has a peak envelope that is a rectangle for minutes
-   * on end, and drawing only that gives a slab with no readable structure.
-   * The average moves with how dense the music actually is, so a breakdown
-   * reads as a breakdown even when its peaks reach as high as the drop's.
-   *
-   * It is a mean of per-bucket extremes, not a true RMS — a real RMS would
-   * need a third array in the peaks file and a re-analysis of every track,
-   * and this is computed from buckets the loop is already walking.
-   */
-  meanMin: number;
-  meanMax: number;
 }
 
 /** min/max across a fractional bucket range, or null when it is out of range. */
@@ -248,10 +284,7 @@ function bucketPeak(
     const t = Math.min(1, Math.max(0, fromBucket - first));
     const min = level.min[i] + (level.min[j] - level.min[i]) * t;
     const max = level.max[i] + (level.max[j] - level.max[i]) * t;
-    // One bucket under the column: the average IS the peak, so the body
-    // fills the envelope and the two layers coincide. Correct, not a
-    // special case to work around.
-    return { min, max, meanMin: min, meanMax: max };
+    return { min, max };
   }
 
   const a = Math.max(0, first);
@@ -260,16 +293,11 @@ function bucketPeak(
 
   let min = 0;
   let max = 0;
-  let sumMin = 0;
-  let sumMax = 0;
   for (let i = a; i <= b; i += 1) {
     if (level.min[i] < min) min = level.min[i];
     if (level.max[i] > max) max = level.max[i];
-    sumMin += level.min[i];
-    sumMax += level.max[i];
   }
-  const count = b - a + 1;
-  return { min, max, meanMin: sumMin / count, meanMax: sumMax / count };
+  return { min, max };
 }
 
 /** Theme colours, read from the document rather than hardcoded. */
@@ -277,8 +305,8 @@ export function waveColors(): Pick<
   DrawOptions,
   | 'playedColor'
   | 'unplayedColor'
-  | 'playedPeakColor'
-  | 'unplayedPeakColor'
+  | 'playedGhostColor'
+  | 'unplayedGhostColor'
   | 'centreColor'
 > {
   const style = getComputedStyle(document.documentElement);
@@ -287,12 +315,12 @@ export function waveColors(): Pick<
     return alpha == null ? `rgb(${triplet})` : `rgb(${triplet} / ${alpha})`;
   };
   return {
-    // The body is the brighter of each pair, so the eye reads density first
-    // and the peak envelope as the halo around it.
+    // Detail bright, ghost dim. The eye reads the spikes as the beat and the
+    // dim shape behind them as the song.
     playedColor: rgb('--keystone-lime'),
-    playedPeakColor: rgb('--keystone-lime', 0.35),
-    unplayedColor: rgb('--gray-500'),
-    unplayedPeakColor: rgb('--gray-600', 0.65),
+    playedGhostColor: rgb('--keystone-lime', 0.22),
+    unplayedColor: rgb('--gray-400'),
+    unplayedGhostColor: rgb('--gray-700'),
     centreColor: rgb('--gray-700'),
   };
 }

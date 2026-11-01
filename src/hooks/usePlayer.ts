@@ -59,19 +59,33 @@ export function usePlayer() {
     const onCanPlay = () => {
       if (!usePlayerStore.getState().isPlaying) return;
       if (!el.paused) return;
-      el.play().catch((e) => console.error('[player] play rejected:', e));
+      void beginPlayback(el);
+    };
+
+    /**
+     * The element gave up on the source.
+     *
+     * Named rather than logged. A file the webview cannot decode and a bug in
+     * the transport are the same thing from the user's chair — no sound and a
+     * button that appears dead — and the two have completely different fixes.
+     */
+    const onError = () => {
+      usePlayerStore.getState().setLoadError(describeMediaError(el));
+      usePlayerStore.getState().pause();
     };
 
     el.addEventListener('timeupdate', onTime);
     el.addEventListener('loadedmetadata', onMeta);
     el.addEventListener('ended', onEnded);
     el.addEventListener('canplay', onCanPlay);
+    el.addEventListener('error', onError);
 
     return () => {
       el.removeEventListener('timeupdate', onTime);
       el.removeEventListener('loadedmetadata', onMeta);
       el.removeEventListener('ended', onEnded);
       el.removeEventListener('canplay', onCanPlay);
+      el.removeEventListener('error', onError);
       el.pause();
       el.src = '';
       audioRef.current = null;
@@ -134,12 +148,12 @@ export function usePlayer() {
         // track already loaded it restarts the *previous* one. Reading the
         // flag from the store rather than from the closure keeps the answer
         // current: the user may have hit pause while the path was in flight.
-        if (usePlayerStore.getState().isPlaying) {
-          el2.play().catch((e) => console.error('[player] play rejected:', e));
-        }
+        if (usePlayerStore.getState().isPlaying) void beginPlayback(el2);
       })
       .catch((e) => {
-        console.error('[player] could not load track:', e);
+        usePlayerStore
+          .getState()
+          .setLoadError(`Could not find the file: ${String(e)}`);
         // Clear it so the next render retries rather than sitting on a track
         // that is marked loaded and has no source.
         if (loadedIdRef.current === loadingId) loadedIdRef.current = null;
@@ -156,7 +170,7 @@ export function usePlayer() {
       // element last held, which is silence on the first track and the
       // previous track on every one after it.
       if (readyIdRef.current !== currentTrack?.id) return;
-      el.play().catch((e) => console.error('[player] play rejected:', e));
+      void beginPlayback(el);
       return;
     }
     el.pause();
@@ -168,6 +182,51 @@ export function usePlayer() {
   }, [isPlaying, stopSeq, setCurrentTime, currentTrack?.id]);
 
   return { seek };
+}
+
+/**
+ * One place that calls `play()`, so one place that reports why it did not.
+ *
+ * A rejected `play()` is the other half of the silent-failure problem: the
+ * promise rejects, the element stays paused, and without this the only trace
+ * is a console line. `NotAllowedError` in particular is the webview refusing
+ * autoplay, which is a different problem from a file it cannot read, and the
+ * message is the only thing that tells them apart.
+ */
+async function beginPlayback(el: HTMLAudioElement): Promise<void> {
+  try {
+    await el.play();
+    usePlayerStore.getState().setLoadError(null);
+  } catch (e) {
+    const err = e as { name?: string; message?: string };
+    usePlayerStore
+      .getState()
+      .setLoadError(
+        err.name === 'NotAllowedError'
+          ? 'The webview blocked playback. Press play again.'
+          : `Playback failed: ${err.name ?? ''} ${err.message ?? String(e)}`.trim(),
+      );
+    usePlayerStore.getState().pause();
+  }
+}
+
+/** A MediaError code as something a person can act on. */
+function describeMediaError(el: HTMLAudioElement): string {
+  const code = el.error?.code;
+  const detail = el.error?.message ? ` (${el.error.message})` : '';
+  switch (code) {
+    case MediaError.MEDIA_ERR_ABORTED:
+      return `Loading was aborted${detail}`;
+    case MediaError.MEDIA_ERR_NETWORK:
+      return `The file could not be read from disk${detail}`;
+    case MediaError.MEDIA_ERR_DECODE:
+      return `The file is corrupt or uses an unsupported encoding${detail}`;
+    case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+      // The common one, and it has two very different causes.
+      return `This format cannot be played by the webview, or the file is missing${detail}`;
+    default:
+      return `The file could not be played${detail}`;
+  }
 }
 
 /**

@@ -5,6 +5,7 @@ import { CollectionsPanel } from '../collections/CollectionsPanel';
 import { AddTracksDialog } from '../import/AddTracksDialog';
 import { MusicImportDialog } from '../import/MusicImportDialog';
 import { CamelotWheelSlot } from '../library/CamelotWheelSlot';
+import { Logo } from '../ui/Logo';
 import { useUiStore } from '../../stores/uiStore';
 import { useAddFolder } from '../../hooks/useLibrary';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -37,6 +38,15 @@ export function Sidebar() {
       style={{ width }}
       className="flex shrink-0 flex-col border-r border-gray-700 bg-gray-900"
     >
+      {/* The mark sits here rather than in the title bar, where macOS draws
+          the traffic lights over anything at the left edge — that collision
+          is why it moved to the status bar earlier. The sidebar's top is the
+          one place in this window with nothing drawn over it and a natural
+          left edge to sit against. */}
+      <div className="flex items-center gap-2 px-3 pb-1 pt-3">
+        <Logo size={16} />
+      </div>
+
       <CamelotWheelSlot />
 
       <div className="px-3 pb-3">
