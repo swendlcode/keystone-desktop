@@ -43,7 +43,11 @@ export function PlayerBar() {
         </div>
       )}
 
-      <div className="flex min-w-0 items-center gap-4">
+      {/* `flex-wrap`: on a narrow window the readout drops to its own line
+          instead of squeezing the title into an ellipsis after four words.
+          The title is the one thing here that cannot be guessed from a
+          fragment. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2">
         <span className="min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wide text-keystone-white">
           {track ? trackLabel(track) : 'No track'}
         </span>

@@ -11,36 +11,40 @@ interface CueMarkersProps {
   /** The element the markers are positioned inside. Measured on each drag. */
   containerRef: RefObject<HTMLDivElement>;
   onSeek: (seconds: number) => void;
+  onContextMenu: (e: React.MouseEvent, cue: CuePoint) => void;
 }
 
 /** Below this, a pointerup is a click to jump rather than the end of a drag. */
 const DRAG_SLOP_PX = 3;
 
 /**
- * CUE 1..8, drawn in place on the waveform as flags.
+ * CUE 1..8, drawn on the waveform as flags.
  *
- * A flag rather than a bare tick: the label hangs off the top of the line, to
- * the right of it, so the line itself stays one hairline wide and keeps
- * marking the exact sample while the name is still readable. A numbered box
- * centred on the line, which is what this was, hid the position it was
- * pointing at behind its own badge — at the zoom levels where a cue is placed
- * accurately, the badge was wider than the region being aimed at.
+ * A flag rather than a bare tick: the label hangs off the top, to the side of
+ * the line, so the line itself stays one hairline wide and keeps marking the
+ * exact sample while the name is still readable. A numbered box centred on the
+ * line — which is what this was — hid the position it was pointing at behind
+ * its own badge.
  *
- * DOM elements over the canvas rather than shapes inside it. Eight of them is
- * not enough to cost anything, and it buys real hit targets, real focus and a
- * drag that does not need its own hit-testing — which is the half of this
- * feature that is actually fiddly. The flag overflows its button's 12px box
- * and is still part of the button, so both the line and the label drag.
+ * The flag is neutral with white text and the line carries the cue's colour.
+ * Colouring the flag too made eight saturated blocks across the top of the
+ * waveform, which competes with the waveform for the same glance.
+ *
+ * **The flag is part of the drag target.** It overflows the button's 12px box
+ * and used to be `pointer-events-none`, so clicks on the label fell through to
+ * the canvas and seeked instead of dragging — which made a cue look unmovable
+ * unless you found the hairline. Everything drawn here is the button.
  *
  * The move is committed on pointerup, never on pointermove: a drag across a
- * five-minute track is a hundred-odd move events and each one would be a
- * write to the user's database.
+ * five-minute track is a hundred-odd move events and each one would be a write
+ * to the user's database.
  */
 export function CueMarkers({
   cues,
   window: win,
   containerRef,
   onSeek,
+  onContextMenu,
 }: CueMarkersProps) {
   const move = useMoveCuePoint();
   const setDragging = usePlayerStore((s) => s.setDraggingCueSlot);
@@ -60,6 +64,9 @@ export function CueMarkers({
   };
 
   const onPointerDown = (e: PointerEvent<HTMLButtonElement>, cue: CuePoint) => {
+    // Right-click opens the menu; starting a drag on it would also move the
+    // cue the user is about to ask to delete.
+    if (e.button !== 0) return;
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = { id: cue.id, slot: cue.slot, startX: e.clientX, moved: false };
@@ -98,44 +105,42 @@ export function CueMarkers({
         if (frac < -0.02 || frac > 1.02) return null;
         const color = cue.color ?? 'var(--color-accent)';
         const dragging = preview?.slot === cue.slot;
-        // Past the right-hand edge the flag would be clipped by the waveform's
-        // own overflow, so it folds to the other side of its line.
-        const flagLeft = frac > 0.88;
+        // Past the right-hand edge the flag would be clipped by the
+        // waveform's own overflow, so it folds to the other side of its line.
+        const flagLeft = frac > 0.86;
 
         return (
           <button
             key={cue.id}
             type="button"
             aria-label={`Cue ${cue.slot + 1}, ${formatTime(ms / 1000)}`}
-            title={`CUE ${cue.slot + 1} — ${CUE_KIND_LABELS[cue.kind]} — ${formatTime(ms / 1000)}`}
+            title={`CUE ${cue.slot + 1} — ${CUE_KIND_LABELS[cue.kind]} — drag to move`}
             style={{ left: `${frac * 100}%`, color }}
             onPointerDown={(e) => onPointerDown(e, cue)}
             onPointerMove={onPointerMove}
             onPointerUp={(e) => onPointerUp(e, cue)}
+            onContextMenu={(e) => onContextMenu(e, cue)}
             onPointerCancel={() => {
               drag.current = null;
               setDragging(null);
               setPreview(null);
             }}
-            // The box is a 12px grab strip centred on the line; the flag
-            // hangs outside it and is dragged along with it.
             className={`absolute top-0 h-full w-3 -translate-x-1/2 cursor-ew-resize touch-none bg-transparent ${
-              dragging ? 'z-20' : 'z-10'
+              dragging ? 'z-30' : 'z-20'
             }`}
           >
-            {/* The line stays one pixel wide at every zoom — it is the thing
-                being aimed at, and a 2px line is 2px of ambiguity. */}
+            {/* One pixel wide at every zoom — it is the thing being aimed at,
+                and a 2px line is 2px of ambiguity. */}
             <span
               className={`pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-current ${
                 dragging ? 'opacity-100' : 'opacity-90'
               }`}
             />
             <span
-              className={`mono pointer-events-none absolute top-0 flex h-4 items-center whitespace-nowrap bg-current px-1 text-[10px] leading-none tracking-wide text-[color:var(--color-on-accent)] ${
-                flagLeft
-                  ? 'right-1/2 rounded-bl-sm rounded-tl-sm'
-                  : 'left-1/2 rounded-br-sm rounded-tr-sm'
-              }`}
+              style={{ borderColor: color }}
+              className={`mono absolute top-0 flex h-[17px] items-center whitespace-nowrap rounded-sm bg-gray-700/95 px-1.5 text-[10px] font-medium tracking-wide text-keystone-white shadow-sm ${
+                flagLeft ? 'right-1/2 border-r-2' : 'left-1/2 border-l-2'
+              } ${dragging ? 'bg-gray-600' : 'hover:bg-gray-600'}`}
             >
               CUE {cue.slot + 1}
             </span>

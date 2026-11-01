@@ -84,13 +84,27 @@ interface DrawOptions {
    */
   width: number;
   height: number;
+  /** The average body, which is what gives a limited master any structure. */
   playedColor: string;
   unplayedColor: string;
+  /** The peak envelope around the body, drawn behind it. */
+  playedPeakColor: string;
+  unplayedPeakColor: string;
   centreColor: string;
 }
 
 /** Silence still reads as a line rather than as nothing. */
 const MIN_THICKNESS = 1;
+
+/**
+ * Peaks stop short of the edges.
+ *
+ * A modern club master is limited to within a hair of full scale for minutes
+ * at a time, so a waveform drawn edge to edge is a solid slab touching both
+ * walls of its box — there is no way to tell a loud section from a louder one
+ * because both are clipped by the frame rather than by the music.
+ */
+const HEADROOM = 0.88;
 
 /** Repaints the whole canvas. There is no partial-invalidation path. */
 export function drawWaveform(
@@ -113,6 +127,9 @@ export function drawWaveform(
   // agree at the seam.
   const tops = new Float32Array(width);
   const bottoms = new Float32Array(width);
+  const bodyTops = new Float32Array(width);
+  const bodyBottoms = new Float32Array(width);
+  const scale = mid * HEADROOM;
 
   for (let x = 0; x < width; x += 1) {
     const t0 = window.startS + (x / width) * spanS;
@@ -121,29 +138,40 @@ export function drawWaveform(
     if (!peak) {
       tops[x] = mid;
       bottoms[x] = mid;
+      bodyTops[x] = mid;
+      bodyBottoms[x] = mid;
       continue;
     }
-    let top = mid - peak.max * mid;
-    let bottom = mid - peak.min * mid;
+
+    let top = mid - peak.max * scale;
+    let bottom = mid - peak.min * scale;
     if (bottom - top < MIN_THICKNESS) {
       top = mid - MIN_THICKNESS / 2;
       bottom = mid + MIN_THICKNESS / 2;
     }
     tops[x] = top;
     bottoms[x] = bottom;
+    bodyTops[x] = mid - peak.meanMax * scale;
+    bodyBottoms[x] = mid - peak.meanMin * scale;
   }
-
-  paintEnvelope(ctx, tops, bottoms, width, opts.unplayedColor);
 
   // Clipped rather than decided per column, so the split lands on the exact
   // playhead instead of snapping to a pixel boundary.
-  const playedPx = ((playheadS - window.startS) / spanS) * width;
+  const playedPx = Math.min(Math.max(((playheadS - window.startS) / spanS) * width, 0), width);
+
+  const layers = (peakColor: string, bodyColor: string) => {
+    paintEnvelope(ctx, tops, bottoms, width, peakColor);
+    paintEnvelope(ctx, bodyTops, bodyBottoms, width, bodyColor);
+  };
+
+  layers(opts.unplayedPeakColor, opts.unplayedColor);
+
   if (playedPx > 0) {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, 0, Math.min(playedPx, width), height);
+    ctx.rect(0, 0, playedPx, height);
     ctx.clip();
-    paintEnvelope(ctx, tops, bottoms, width, opts.playedColor);
+    layers(opts.playedPeakColor, opts.playedColor);
     ctx.restore();
   }
 
@@ -176,12 +204,33 @@ function paintEnvelope(
   ctx.fill();
 }
 
+interface ColumnPeak {
+  /** Loudest excursion in the column — the outer envelope. */
+  min: number;
+  max: number;
+  /**
+   * Average excursion across the column's buckets — the inner body.
+   *
+   * This is the whole reason a waveform has shape. A track limited to within
+   * a hair of full scale has a peak envelope that is a rectangle for minutes
+   * on end, and drawing only that gives a slab with no readable structure.
+   * The average moves with how dense the music actually is, so a breakdown
+   * reads as a breakdown even when its peaks reach as high as the drop's.
+   *
+   * It is a mean of per-bucket extremes, not a true RMS — a real RMS would
+   * need a third array in the peaks file and a re-analysis of every track,
+   * and this is computed from buckets the loop is already walking.
+   */
+  meanMin: number;
+  meanMax: number;
+}
+
 /** min/max across a fractional bucket range, or null when it is out of range. */
 function bucketPeak(
   level: WaveformLevel,
   fromBucket: number,
   toBucket: number,
-): { min: number; max: number } | null {
+): ColumnPeak | null {
   const n = level.max.length;
   if (n === 0 || fromBucket >= n || toBucket <= 0) return null;
 
@@ -197,10 +246,12 @@ function bucketPeak(
     const i = Math.min(n - 1, Math.max(0, first));
     const j = Math.min(n - 1, i + 1);
     const t = Math.min(1, Math.max(0, fromBucket - first));
-    return {
-      min: level.min[i] + (level.min[j] - level.min[i]) * t,
-      max: level.max[i] + (level.max[j] - level.max[i]) * t,
-    };
+    const min = level.min[i] + (level.min[j] - level.min[i]) * t;
+    const max = level.max[i] + (level.max[j] - level.max[i]) * t;
+    // One bucket under the column: the average IS the peak, so the body
+    // fills the envelope and the two layers coincide. Correct, not a
+    // special case to work around.
+    return { min, max, meanMin: min, meanMax: max };
   }
 
   const a = Math.max(0, first);
@@ -209,23 +260,39 @@ function bucketPeak(
 
   let min = 0;
   let max = 0;
+  let sumMin = 0;
+  let sumMax = 0;
   for (let i = a; i <= b; i += 1) {
     if (level.min[i] < min) min = level.min[i];
     if (level.max[i] > max) max = level.max[i];
+    sumMin += level.min[i];
+    sumMax += level.max[i];
   }
-  return { min, max };
+  const count = b - a + 1;
+  return { min, max, meanMin: sumMin / count, meanMax: sumMax / count };
 }
 
 /** Theme colours, read from the document rather than hardcoded. */
 export function waveColors(): Pick<
   DrawOptions,
-  'playedColor' | 'unplayedColor' | 'centreColor'
+  | 'playedColor'
+  | 'unplayedColor'
+  | 'playedPeakColor'
+  | 'unplayedPeakColor'
+  | 'centreColor'
 > {
   const style = getComputedStyle(document.documentElement);
-  const rgb = (token: string) => `rgb(${style.getPropertyValue(token).trim()})`;
+  const rgb = (token: string, alpha?: number) => {
+    const triplet = style.getPropertyValue(token).trim();
+    return alpha == null ? `rgb(${triplet})` : `rgb(${triplet} / ${alpha})`;
+  };
   return {
+    // The body is the brighter of each pair, so the eye reads density first
+    // and the peak envelope as the halo around it.
     playedColor: rgb('--keystone-lime'),
-    unplayedColor: rgb('--gray-600'),
+    playedPeakColor: rgb('--keystone-lime', 0.35),
+    unplayedColor: rgb('--gray-500'),
+    unplayedPeakColor: rgb('--gray-600', 0.65),
     centreColor: rgb('--gray-700'),
   };
 }

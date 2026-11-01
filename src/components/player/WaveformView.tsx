@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CueMarkers } from './CueMarkers';
+import { CueRegions } from './CueRegions';
+import { WaveformMenu, type WaveformMenuAnchor } from './WaveformMenu';
 import { drawWaveform, waveColors, waveSpan, waveWindow } from './waveformDraw';
 import { useWaveform } from '../../hooks/useAnalysis';
 import { useCuePoints } from '../../hooks/useCues';
@@ -26,6 +28,9 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: HEIGHT });
+  /** Pointer position across the strip, 0-1, or null when it is elsewhere. */
+  const [hoverFrac, setHoverFrac] = useState<number | null>(null);
+  const [menu, setMenu] = useState<WaveformMenuAnchor | null>(null);
 
   const { data: wave } = useWaveform(track.id);
   const { data: cues = [] } = useCuePoints(track.id);
@@ -99,6 +104,25 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
   const playheadFrac =
     (currentTime - win.startS) / Math.max(win.endS - win.startS, 1e-6);
 
+  const fracFromClientX = (clientX: number): number | null => {
+    const rect = boxRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0) return null;
+    return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+  };
+
+  const openMenu = (e: React.MouseEvent, cue: (typeof cues)[number] | null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const frac = fracFromClientX(e.clientX);
+    if (frac == null) return;
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      positionMs: (win.startS + frac * (win.endS - win.startS)) * 1000,
+      cue,
+    });
+  };
+
   // The Display Options toggle hides what the detector proposed; a cue the
   // user placed or dragged is theirs and stays visible either way.
   const visibleCues =
@@ -110,12 +134,15 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
     <div
       ref={boxRef}
       style={{ height: HEIGHT }}
-      onPointerDown={(e) => seekFromClientX(e.clientX)}
-      title={
-        zoom > 0
-          ? 'Scroll to pan · \u2318 scroll to zoom'
-          : '\u2318 scroll to zoom in'
-      }
+      onPointerDown={(e) => e.button === 0 && seekFromClientX(e.clientX)}
+      onPointerMove={(e) => setHoverFrac(fracFromClientX(e.clientX))}
+      onPointerLeave={() => setHoverFrac(null)}
+      onContextMenu={(e) => openMenu(e, null)}
+      // No `title` here. A native tooltip on the strip itself pops up in the
+      // middle of the waveform after a second of hovering and covers the part
+      // the pointer is aimed at — which is the part being read. The scroll and
+      // zoom gestures are announced on the zoom control instead.
+      aria-label="Waveform — scroll to pan, Cmd-scroll to zoom, right-click to add a cue"
       className="relative w-full cursor-col-resize overflow-hidden rounded-md bg-gray-800"
     >
       <canvas ref={canvasRef} className="block h-full w-full" />
@@ -126,12 +153,28 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
           className="pointer-events-none absolute inset-y-0 w-px bg-keystone-white"
         />
       )}
+      <CueRegions
+        cues={visibleCues}
+        window={win}
+        durationS={durationS}
+        hoverFrac={hoverFrac}
+        onSeek={onSeek}
+      />
       <CueMarkers
         cues={visibleCues}
         window={win}
         containerRef={boxRef}
         onSeek={onSeek}
+        onContextMenu={(e, cue) => openMenu(e, cue)}
       />
+      {menu && (
+        <WaveformMenu
+          anchor={menu}
+          trackId={track.id}
+          cues={cues}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </div>
   );
 }
