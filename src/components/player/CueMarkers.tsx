@@ -26,9 +26,13 @@ const DRAG_SLOP_PX = 3;
  * line — which is what this was — hid the position it was pointing at behind
  * its own badge.
  *
- * The flag is neutral with white text and the line carries the cue's colour.
- * Colouring the flag too made eight saturated blocks across the top of the
- * waveform, which competes with the waveform for the same glance.
+ * Both the flag and the line are neutral. The line used to carry the cue's
+ * own colour, and the engine's palette for a detected cue runs through the
+ * same greens the waveform is drawn in — so a marker sitting on a loud bar
+ * disappeared into it, which is the one thing a position marker may not do.
+ * Grey is legible against every part of the waveform because nothing in the
+ * waveform is grey. The cue's colour survives as a dot on its flag, where
+ * there is a flat backdrop to read it against.
  *
  * **The flag is part of the drag target.** It overflows the button's 12px box
  * and used to be `pointer-events-none`, so clicks on the label fell through to
@@ -120,7 +124,7 @@ export function CueMarkers({
             type="button"
             aria-label={`Cue ${cue.slot + 1}, ${formatTime(ms / 1000)}`}
             title={`CUE ${cue.slot + 1} — ${CUE_KIND_LABELS[cue.kind]} — drag to move`}
-            style={{ left: `${frac * 100}%`, color }}
+            style={{ left: `${frac * 100}%` }}
             onPointerDown={(e) => onPointerDown(e, cue)}
             onPointerMove={onPointerMove}
             onPointerUp={(e) => onPointerUp(e, cue)}
@@ -137,22 +141,27 @@ export function CueMarkers({
             {/* One pixel wide at every zoom — it is the thing being aimed at,
                 and a 2px line is 2px of ambiguity. */}
             <span
-              className={`pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-current ${
-                dragging ? 'opacity-100' : 'opacity-90'
+              className={`pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 ${
+                dragging ? 'bg-keystone-white' : 'bg-gray-300/80'
               }`}
             />
             <span
-              style={{ borderColor: color }}
-              className={`mono absolute top-0 flex h-[17px] items-center whitespace-nowrap rounded-sm bg-gray-700/95 px-1.5 text-[10px] font-medium tracking-wide text-keystone-white shadow-sm ${
-                flagLeft ? 'right-1/2 border-r-2' : 'left-1/2 border-l-2'
+              className={`mono absolute top-0 flex h-[17px] items-center gap-1 whitespace-nowrap rounded-sm bg-gray-700/95 px-1.5 text-[10px] font-medium tracking-wide text-keystone-white shadow-sm ${
+                flagLeft ? 'right-1/2' : 'left-1/2'
               } ${dragging ? 'bg-gray-600' : 'hover:bg-gray-600'}`}
             >
+              {/* The cue's own colour, on a flat backdrop where it reads. */}
+              <span
+                aria-hidden
+                style={{ background: color }}
+                className="h-1.5 w-1.5 shrink-0 rounded-full"
+              />
               CUE {cue.slot + 1}
             </span>
             {/* While dragging, where it would land. Placing a cue accurately
                 means reading the number rather than estimating it. */}
             {dragging && (
-              <span className="mono pointer-events-none absolute bottom-0 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm bg-current px-1 py-0.5 text-[10px] leading-none text-[color:var(--color-on-accent)]">
+              <span className="mono pointer-events-none absolute bottom-0 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm bg-keystone-white px-1 py-0.5 text-[10px] leading-none text-keystone-black">
                 {formatTime(ms / 1000)}
               </span>
             )}

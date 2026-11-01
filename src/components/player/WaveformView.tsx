@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CueMarkers } from './CueMarkers';
 import { CueRegions } from './CueRegions';
 import { WaveformMenu, type WaveformMenuAnchor } from './WaveformMenu';
+import { WaveformScrollbar } from './WaveformScrollbar';
 import { drawWaveform, waveColors, waveSpan, waveWindow } from './waveformDraw';
 import { useWaveform } from '../../hooks/useAnalysis';
 import { useCuePoints } from '../../hooks/useCues';
@@ -163,7 +164,7 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
       // middle of the waveform after a second of hovering and covers the part
       // the pointer is aimed at — which is the part being read. The scroll and
       // zoom gestures are announced on the zoom control instead.
-      aria-label="Waveform — scroll to pan, Cmd-scroll to zoom, right-click to add a cue"
+      aria-label="Waveform — scroll to zoom, scroll sideways to pan, right-click to add a cue"
       className="relative w-full cursor-col-resize overflow-hidden rounded-md bg-gray-800"
     >
       <canvas ref={canvasRef} className="block h-full w-full" />
@@ -200,6 +201,7 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
         onSeek={onSeek}
         onContextMenu={(e, cue) => openMenu(e, cue)}
       />
+      <WaveformScrollbar window={win} durationS={durationS} />
       {menu && (
         <WaveformMenu
           anchor={menu}
@@ -213,12 +215,18 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
 }
 
 /**
- * Scroll to pan, Cmd / Ctrl scroll to zoom about the pointer.
+ * Scroll up and down to zoom; scroll sideways to pan.
+ *
+ * The axis decides, not a modifier. On a trackpad the two gestures are
+ * already distinct — a two-finger swipe up and a two-finger swipe sideways —
+ * so spending a held key on the distinction asks for a third hand while
+ * placing a cue. Cmd and Ctrl still zoom, because that is the reflex from
+ * every other canvas and a mouse with one wheel has no sideways axis.
  *
  * A native listener rather than React's `onWheel`, because React registers
  * wheel handlers passively and a passive handler cannot call
- * `preventDefault()` — without which Cmd-scroll is the webview's page zoom and
- * the whole window scales instead of the waveform.
+ * `preventDefault()` — without which Cmd-scroll is the webview's page zoom
+ * and the whole window scales instead of the waveform.
  *
  * Zoom is anchored on the pointer, not on the centre: the second under the
  * cursor stays under the cursor. That is what makes it usable for placing a
@@ -247,33 +255,35 @@ function useWaveformWheel(
       const win = waveWindow(total, store.zoom, store.currentTime, store.viewCentreS);
       const span = win.endS - win.startS;
 
-      if (e.metaKey || e.ctrlKey) {
+      // Sideways means pan — but only when the gesture is actually sideways.
+      // A trackpad reports a little of both axes on almost every swipe, so
+      // the dominant one wins rather than any horizontal movement at all
+      // hijacking a vertical scroll.
+      const sideways =
+        Math.abs(e.deltaX) > Math.abs(e.deltaY) && !e.metaKey && !e.ctrlKey;
+
+      if (sideways) {
+        // Nothing to pan to at zoom 0: the whole track is already on screen.
+        if (store.zoom === 0) return;
         e.preventDefault();
-        const next = Math.max(
-          0,
-          Math.min(MAX_ZOOM, store.zoom + (e.deltaY < 0 ? 1 : -1)),
-        );
-        if (next === store.zoom) return;
-        const anchorS = win.startS + frac * span;
-        store.setZoom(next);
-        // Zoom 0 is the whole track, so there is nothing left to pan and the
-        // centre goes back to following the playhead.
         store.setViewCentre(
-          next === 0 ? null : anchorS + (0.5 - frac) * waveSpan(total, next),
+          (win.startS + win.endS) / 2 + (e.deltaX / rect.width) * span,
         );
         return;
       }
 
-      // Nothing to pan to at zoom 0, and swallowing the event there would eat
-      // a scroll the user meant for the list below.
-      if (store.zoom === 0) return;
       e.preventDefault();
-      // Trackpads send a two-axis delta; a mouse wheel only sends deltaY. Take
-      // whichever axis the gesture actually moved on.
-      const delta =
-        Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      const next = Math.max(
+        0,
+        Math.min(MAX_ZOOM, store.zoom + (e.deltaY < 0 ? 1 : -1)),
+      );
+      if (next === store.zoom) return;
+      const anchorS = win.startS + frac * span;
+      store.setZoom(next);
+      // Zoom 0 is the whole track, so there is nothing left to pan and the
+      // centre goes back to following the playhead.
       store.setViewCentre(
-        (win.startS + win.endS) / 2 + (delta / rect.width) * span,
+        next === 0 ? null : anchorS + (0.5 - frac) * waveSpan(total, next),
       );
     };
 

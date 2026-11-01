@@ -67,7 +67,12 @@ export function PlayerBar() {
           bar that cannot be guessed from a fragment, and an artist, a title,
           a mix name and a label do not fit in what is left over beside six
           controls. It gets the row. */}
-      <span className="block w-full text-sm font-semibold uppercase tracking-wide text-keystone-white">
+      {/* Not uppercased. A track's name is data, not a label: forcing case
+          throws away the capitalisation the artist chose, turns "deadmau5"
+          into "DEADMAU5" and an all-caps rendering is wider and slower to
+          read than the original. The uppercase treatment belongs to section
+          headings, which are ours to style. */}
+      <span className="block w-full text-sm font-semibold text-keystone-white">
         {track ? trackLabel(track) : 'No track'}
       </span>
 
