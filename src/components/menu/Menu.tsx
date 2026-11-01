@@ -10,7 +10,17 @@ interface MenuProps {
   onClose: () => void;
 }
 
-const WIDTH = 230;
+/**
+ * The panel sizes to its longest label between these two.
+ *
+ * It used to be a flat 230px, so every label that grew with the selection —
+ * "Remove 16 Songs from Library…", "Add 16 Tracks to Collection" — was
+ * truncated to an ellipsis at exactly the moment it had something extra to
+ * say. The ceiling keeps a long collection name from stretching the panel
+ * across the window.
+ */
+const MIN_WIDTH = 230;
+const MAX_WIDTH = 340;
 const ITEM_H = 28;
 const SEPARATOR_H = 9;
 const EDGE = 8;
@@ -91,11 +101,14 @@ function MenuList({
   // previous version only clamped x, which on a menu opened near the right
   // of the window slid the submenu back ON TOP of its own parent — covering
   // the row that opened it and every row below.
-  const fitsRight = x + WIDTH <= window.innerWidth - EDGE;
+  // Clamped against the widest the panel can be rather than its actual
+  // width, which is not known until it has laid out. Erring wide only ever
+  // moves it further inside the window.
+  const fitsRight = x + MAX_WIDTH <= window.innerWidth - EDGE;
   const left =
     fitsRight || flipX == null
-      ? Math.max(EDGE, Math.min(x, window.innerWidth - WIDTH - EDGE))
-      : Math.max(EDGE, flipX - WIDTH + 6);
+      ? Math.max(EDGE, Math.min(x, window.innerWidth - MAX_WIDTH - EDGE))
+      : Math.max(EDGE, flipX - MAX_WIDTH + 6);
 
   const top = Math.max(
     EDGE,
@@ -106,8 +119,16 @@ function MenuList({
   return (
     <div
       role="menu"
-      style={{ top, left, width: WIDTH, maxHeight }}
-      className="fixed z-50 overflow-y-auto overscroll-contain rounded-lg border border-gray-700 bg-gray-900 py-1 shadow-2xl shadow-black/50"
+      style={{ top, left, minWidth: MIN_WIDTH, maxWidth: MAX_WIDTH, maxHeight }}
+      // A submenu is a layer above its parent, so it says so: a lighter
+      // surface, a brighter edge and a deeper shadow. Drawn identically to
+      // the parent it looked like one panel that had grown a second column,
+      // which is the one thing a nested menu must not look like.
+      className={`fixed z-50 w-max overflow-y-auto overscroll-contain rounded-lg py-1 ${
+        flipX == null
+          ? 'border border-gray-700 bg-gray-900 shadow-2xl shadow-black/50'
+          : 'border border-gray-600 bg-gray-800 shadow-2xl shadow-black/70 ring-1 ring-black/40'
+      }`}
     >
       {items.map((item) => (
         <div key={item.id}>
