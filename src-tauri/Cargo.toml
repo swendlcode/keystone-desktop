@@ -5,6 +5,11 @@ description = "Harmonic-mixing analysis for DJ libraries"
 authors = ["Swendl"]
 edition = "2021"
 license = "MIT"
+# The eval harness is a second binary, which makes a bare `cargo run`
+# ambiguous — and `tauri dev` runs exactly that, so without this line the dev
+# command dies on "could not determine which binary to run" before the window
+# ever opens. The app is the default; the harness is asked for by name.
+default-run = "keystone"
 
 [lib]
 name = "keystone_lib"
