@@ -23,6 +23,8 @@ export function usePlayer() {
   const loadedIdRef = useRef<string | null>(null);
   /** The track whose `src` is actually assigned, as opposed to in flight. */
   const readyIdRef = useRef<string | null>(null);
+  /** The blob URL currently loaded, so it can be revoked when replaced. */
+  const objectUrlRef = useRef<string | null>(null);
 
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -91,6 +93,10 @@ export function usePlayer() {
       el.pause();
       el.src = '';
       audioRef.current = null;
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
     };
   }, [setCurrentTime, setDuration, playNext]);
 
@@ -126,7 +132,7 @@ export function usePlayer() {
       keystoneService.getPlaybackPath(currentTrack.id),
       keystoneService.getStartOffsetMs(currentTrack.id),
     ])
-      .then(([path, offsetMs]) => {
+      .then(async ([path, offsetMs]) => {
         // Keyed on the track id, NOT on a `cancelled` flag set by cleanup.
         // This effect depends on `currentTrack`, which is a fresh object
         // every time react-query patches the row — and the analysis queue
@@ -136,8 +142,18 @@ export function usePlayer() {
         // that was permanently dead for that track. Asking whether we are
         // still loading the same track survives any number of re-runs.
         if (loadedIdRef.current !== loadingId || !audioRef.current) return;
+
+        const blobUrl = await fetchAsBlobUrl(mediaUrl(path));
+        // The await above is a second chance for the track to have changed.
+        if (loadedIdRef.current !== loadingId || !audioRef.current) {
+          URL.revokeObjectURL(blobUrl);
+          return;
+        }
+
         const el2 = audioRef.current;
-        el2.src = mediaUrl(path);
+        if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = blobUrl;
+        el2.src = blobUrl;
         const start = startOffsetFor(currentTrack, pendingStartAt, offsetMs / 1000);
         if (start > 0) el2.currentTime = start;
         readyIdRef.current = currentTrack.id;
@@ -184,6 +200,33 @@ export function usePlayer() {
   }, [isPlaying, stopSeq, setCurrentTime, currentTrack?.id]);
 
   return { seek };
+}
+
+/**
+ * Read the file through the asset protocol and hand the element a blob.
+ *
+ * **Not `el.src = convertFileSrc(path)`, and this is not an optimisation.**
+ * WKWebView's media loader does not use the webview's custom URL scheme
+ * handlers. `fetch` does, so the same `asset://` URL that returns
+ * `206 audio/mpeg` to a fetch is rejected outright by an `<audio>` element:
+ * `networkState` 3, `mediaError` 4, `play()` throwing `NotSupportedError` —
+ * while `canPlayType('audio/mpeg')` still answers "maybe", because the codec
+ * was never the problem. That is why no amount of checking the file, the
+ * scope, the MIME type or the range support explained anything: the bytes
+ * were always being served correctly to the one consumer that could not ask
+ * for them.
+ *
+ * So the bytes are fetched here, where the scheme handler is reachable, and
+ * given to the element as a blob. The cost is the compressed file in memory
+ * for the loaded track — a few MB for an MP3, ~25MB for a long 320kbps one —
+ * and no streaming start. Both are acceptable for an audition player; what
+ * the engine plan forbids is holding a *decoded* track, which is an order of
+ * magnitude worse and is not what this does.
+ */
+async function fetchAsBlobUrl(url: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`the file could not be read (${res.status})`);
+  return URL.createObjectURL(await res.blob());
 }
 
 /**
