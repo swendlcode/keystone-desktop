@@ -175,6 +175,17 @@ src-tauri/              Rust backend
 - **Comments say WHY.** Never restate the line below. Everything non-obvious in this
   codebase was decided against an alternative, and the comment's job is to name the
   alternative and why it lost.
+- **A fitted constant carries its corpus, and none of them is general.**
+  `key::fuse`'s four confidence gates and `energy::constants`' fourteen moments plus
+  eleven decile knots were fitted on **one DJ's library** — `docs/ACCURACY.md` §1, house
+  and pop, 89.4% minor labels, no classical, jazz, live or rubato material — with half of
+  it held out. Each one states in its own comment what it was fitted on, on what date,
+  and what would invalidate it, and that comment is part of the constant: a bare number
+  is a trap for whoever reads it next. **Refit against a broader corpus before anyone
+  calls either model calibrated without the qualifier**, and treat a change to the key
+  profiles, `template::SOFTMAX_TEMPERATURE`, the chroma front end, the seven energy
+  features, the HPSS reductions or the core-region rule as invalidating the fit outright.
+  Re-run the passes in `docs/ACCURACY.md` §10; never nudge a knot.
 - **Licence rule, and it drives half the engine design.** Keystone ships MIT, so only
   MIT / Apache-2.0 / BSD, plus MPL-2.0 (file-level). **No GPL, no AGPL, no
   unlicensed code.** libKeyFinder, Essentia, aubio, madmom's model files, `edmkey` and
@@ -427,6 +438,48 @@ quantisation at 100 fps cannot resolve it; it comes from a least-squares fit of 
 against beat index, or it is not reported. **Never remove a confidence field to make a
 column look tidier.**
 
+### The confidence model, and the detection gate that looks like part of it
+
+`analysis/key/fuse.rs`. Confidence is `evidence × √separation × agreement`, with
+agreement held above `AGREEMENT_FLOOR` and separation concave on purpose, and four
+constants decide what a DJ sees. All four were **fitted 2026-11-01** on the fit half
+(532 of 1,063 files) of the corpus in `docs/ACCURACY.md` §1. Before that they came off
+synthetic chords, which read nothing like real records: confidence was exactly 0.000 on
+64.3% of a real library and below the badge floor on 88.4% of it.
+
+| constant | was | is | what it decides |
+|---|---|---|---|
+| `SPREAD_FLOOR` | 0.08 | **0.014** | below this the chroma says nothing and evidence is 0 |
+| `SPREAD_FULL` | 0.14 | **0.040** | at this the evidence term is 1 |
+| `AMBIGUOUS_CONFIDENCE_FLOOR` | 0.25 | **0.12** | below this: no badge at all |
+| `MODE_AMBIGUITY_THRESHOLD` | 0.6 | **0.80** | below this: `8A/8B`, not a letter |
+
+Refusals fell from 88.4% of the library to 22.2% (94.0% to 10.0% on full club tracks).
+Three things about how that was done are load-bearing:
+
+- **The floor is not where the fit wanted it. It is where the drum-loop promise is.**
+  Synthetic percussion reaches 0.0117–0.0132 through this pipeline at every duration
+  from 8 s to 120 s, and the thinnest real full track sits at 0.0125 — inside that band.
+  0.014 refuses 1.7% of real full tracks on purpose so that percussion keeps being
+  refused. The two distributions overlap, so the floor is a price, not a separation.
+- **The gate that decides the key is a different gate and was deliberately left where
+  it was.** `chunks::CHUNK_WEIGHT_FLOOR` / `_FULL` still carry the synthetic 0.08 /
+  0.14, because that gate picks which chunks vote and therefore picks the key, while the
+  `fuse` gates only decide how loudly the answer is stated. That is why the calibration
+  moved no estimate on any of the 1,063 tracks — key, Camelot, tempo and tuning are
+  bit-identical, and the shipped scorer's report byte-identical on all six groups.
+  Moving the chunk gate is a detection change and needs its own measurement.
+- **`AMBIGUOUS_CONFIDENCE_FLOOR` is a criterion, not a peak in the data.** 0.12 is the
+  largest value at which the set it refuses is still below even on the wheel's own test
+  — would mixing on that badge work: same code, one step either way, or the relative.
+  The curve is flat across the whole range, so the number came from the criterion.
+
+Two consequences are known and are not hidden: a uniform chromatic wash longer than
+about 20 s now gets a confident letter (`docs/ACCURACY.md` caveat 13), and 73.9% of
+isolated acapellas get a badge of which 41.5% would clash in a mix. Neither is fixed by
+moving the floor back — `template::match_chroma` standardises its similarities, so flat
+chroma still produces a peaked distribution. The fix is in that front end.
+
 ### Why energy uses fixed published coefficients and no reference database
 
 `analysis/energy/constants.rs`. The score is
@@ -454,6 +507,28 @@ seven features are ratios or per-beat rates, and the only absolute quantity
 (`dynamic_span`) carries the lowest weight. **Do not normalise per genre** — that needs
 a genre detector, and the user's library is not a sample of the world. Test the
 invariance instead (`docs/ENGINE.md` §7.3).
+
+**The ladder is energy model 2, fitted 2026-11-01, and version 1 was not fitted at
+all.** Its μ and σ came from each feature's *definition* rather than from measurement,
+and on real masters two of the seven features saturated (`flux_mean` above Φ = 0.98 on
+99.4% of tracks, `dynamic_span` on 40.9%): 160 of the 176 full tracks in the fit half
+read 8, 9 or 10, so the scale had no scale in it. Model 2 fits μ, σ and the eleven
+decile knots on the full tracks of the fit half of the `docs/ACCURACY.md` corpus — 176
+files, the split written to disk before any audio was read — and the **held-out** half
+now spreads over all ten values, mean 9.07 → 5.62. Spearman between model 1's `raw` and
+model 2's is 0.957: version 1 already ranked the library and threw the ranking away in
+the mapping onto 1–10. Fitting a ladder guarantees *spread* and cannot prove *order*;
+only `docs/ENGINE.md` §7.3 test 4, the ~300 forced-choice human pairs, can, which is
+also why **the seven weights are still not fitted**.
+
+**So a 5 is the median full track in a house and pop DJ library,** and that library is
+the whole anchor. Vocal stems and acapellas — two thirds of the corpus — were excluded
+from the fit, because letting drum-less stems set the median would push every real
+record back to the top of the scale, which is the defect being fixed; the visible
+consequence is that an isolated acapella now reads 1 or 2. Two failures ship with it:
+the 1–10 reading is within ±1 across separate copies of the same recording on only 34
+of 42 pairs, and a 1 dB wide-Q EQ move can shift a step through a downbeat-phase flip
+upstream in S8. Both point at the three spectral-balance features, not at the constants.
 
 Two things people will file as bugs and should not: track energy is the trimmed mean
 over the **core region** (deliberately drop-weighted), not the mean of section
@@ -643,8 +718,14 @@ wrote into their filenames. That measures **agreement with a competitor**, where
 program is known to be right, and it is not comparable with the 75.70 or with the 76.0
 gate — different corpus, different reference, different quantity. Read that document's
 §0 before quoting anything out of it, and read §4 first when it is re-run: a weighted
-total that improves while 88% of the library still shows no key badge has not improved
-anything a user can see.
+total that improves while most of the library still shows no key badge has not improved
+anything a user can see. That was the 2026-10-31 finding — 88.4% of files refused — and
+the 2026-11-01 calibration is the answer to it, at 22.2% of the library and 11.1% of
+full tracks with the key estimates provably unmoved. **One thing changed about how that
+document has to be read:** the binary now carries constants fitted to half of that
+corpus, so §4 and §7.1 are no longer out-of-sample. §4.5 and §7.2 are the held-out
+versions and the only ones to quote; §3, §5 and §6.1 are unaffected, which §2.3 proves
+by measurement rather than by argument.
 
 The harness reports all five MIREX categories plus exact match, mode accuracy and
 key-signature accuracy **separately** — never just the weighted total. GiantSteps is
@@ -748,19 +829,36 @@ and asserted on as a whole `AnalysisResult`. Two stubs remain by decision:
   feed it. The label order and its two anchors are already tested. v1.1 research track.
 - **`export/serato/`** — v1.1 by design.
 
-Not stubs, but not calibrated, which is the same hazard wearing a number:
+Not stubs. The calibration hazard, as it stands after 2026-11-01 — the two defects
+below are fixed and what replaced them is narrower, not nothing:
 
-- **`key/fuse.rs`'s `SPREAD_FLOOR` / `SPREAD_FULL` were fitted on synthetic chords and
-  read ~0 on real records.** Ten tracks from a commercial house crate came back with the
-  right Camelot number on seven and a confidence of 0.00-0.24 on all ten, so every one
-  tripped `AMBIGUOUS_CONFIDENCE_FLOOR` and the badge the product is built around never
-  appears. The constants' own comment says "provisional until calibrated on a real
-  corpus" — this is that bill. Calibrate the evidence ramp on the GiantSteps run, not on
-  a handful of tracks.
-- **`energy/constants.rs`'s quantile ladder has no calibration corpus behind it.** The
-  same ten tracks scored 8, 9 or 10 — peak-time house really is high-energy, but a scale
-  that cannot separate those ten is not yet a scale. Fixing it is an
-  `ENERGY_MODEL_VERSION` bump, so do it once, from a corpus.
+- **Every fitted constant in the binary is fitted to one DJ's house-and-pop library.**
+  Four gates in `key/fuse.rs`, fourteen moments and eleven knots in
+  `energy/constants.rs`. Nothing measures what either does on a techno, drum-and-bass,
+  hip-hop, ambient, jazz or classical library, and `energy/constants.rs` states the
+  anchor outright: a 5 is the median full track in a library like that one.
+  `docs/ACCURACY.md` caveat 12 is the full statement.
+- **Nobody has measured confidence AUC on files no constant has seen.** The fit's own
+  held-out figure (0.69) and the whole-corpus figure (0.689) agree, and they are not
+  independent. One more split is the cheapest honest number left in the engine.
+- **The chunk gate is still synthetic, on purpose.** `chunks::CHUNK_WEIGHT_FLOOR` /
+  `_FULL` were held at 0.08 / 0.14 so the confidence refit could not move a key
+  estimate. The cost is that on 63.7% of the fit half no chunk clears them and the
+  whole-track PCP decides alone, so the chunk machinery contributes nothing there.
+  Moving them is a detection change: score `docs/ACCURACY.md` §3 before and after.
+- **One known false positive, and the test for it passes by accident.** A uniform
+  chromatic wash longer than about 20 s is shown a confident letter;
+  `refusal_tests::atonal_material_comes_back_ambiguous_too` asserts refusal at exactly
+  10.0 s, which is one of the two durations where it still holds, so it should be
+  parameterised over duration. Percussion and silence are still hard zeros from 8 s to
+  120 s. `docs/ACCURACY.md` caveat 13.
+- **The energy ladder spreads a library but is not reproducible to ±1 across copies
+  of one record** — 34 of 42 pairs, worst case 7 (`docs/ACCURACY.md` §7.3) — and the
+  seven weights are unfitted because the ~300 human pairs in `docs/ENGINE.md` §7.3
+  test 4 do not exist. Spread is measured; order is not.
+
+Costs worth knowing before anything here is optimised:
+
 - **`structure/spectra.rs` is the memory and time high-water mark.** 4096/512 over a
   five-minute track is three ~200 MB matrices and the HPSS median filters dominate the
   per-track cost. `frontend/hpss.rs`'s own header says the fix is fewer bins from the
@@ -802,7 +900,19 @@ Still outstanding, unchanged:
   and understand that it re-analyses every cached track.
 - **Energy numbers all moved at once** → someone edited
   `analysis/energy/constants.rs`. That is a migration with an `ENERGY_MODEL_VERSION`
-  bump, not a tweak; those numbers are already in users' file tags.
+  bump, not a tweak; those numbers are already in users' file tags. It has happened
+  once, on 2026-11-01 (model 1 → 2), and the stored numbers were invalidated rather than
+  migrated: `ANALYSIS_VERSION` went 1 → 2 with it, so every cached row misses and is
+  re-analysed. Two consequences a user can see: the first launch after the upgrade
+  re-analyses the whole library a row at a time, so the energy column really does hold
+  both models until the backlog drains and the queue indicator is the only thing that
+  says so; and a re-tag pass is still needed for tags and filenames written under
+  model 1 to agree with the column.
+- **One table showing model 1 and model 2 energies at once** → an
+  `ENERGY_MODEL_VERSION` bump shipped without an `ANALYSIS_VERSION` bump. The analysis
+  cache is keyed on `(content_hash, analysis_version)` and nothing else, so old rows
+  keep being served with their old energies. `analysis/version.rs` has a test that
+  refuses that combination.
 - **Frontend asset URLs** must go through `convertFileSrc`; direct `file://` will not
   work. The asset protocol is enabled in `tauri.conf.json` with scope `["**"]`.
 

@@ -27,6 +27,8 @@ mod camelot_tests;
 #[cfg(test)]
 mod duration_tests;
 #[cfg(test)]
+mod refusal_tests;
+#[cfg(test)]
 mod signal_tests;
 
 use crate::analysis::key::profiles::ProfileId;
@@ -73,6 +75,30 @@ pub struct KeyDetection {
     /// live and rubato tracks are meant to land here.
     pub ambiguous: bool,
     pub evidence: f32,
+    /// The raw gate input: the template voter's score spread, weighted-meaned
+    /// over the chunks that carried a vote. Carried out of the stage because
+    /// the confidence gates are fitted on its distribution, and a constant
+    /// fitted on a number nobody can dump is a constant nobody can refit.
+    pub spread: f32,
+    /// How much of an answer this much audio can support, in [0, 1]. The other
+    /// factor in `evidence`, separated from the spread term so a refusal caused
+    /// by a 4 s file is distinguishable from one caused by flat chroma.
+    pub duration_support: f32,
+    /// No chunk carried a vote, so the whole-track PCP decided. Part of
+    /// detection rather than of the confidence model, which is why the chunk
+    /// gate it depends on is held fixed.
+    pub whole_track_fallback: bool,
+    /// The whole-track PCP's own spread, computed whether or not it decided.
+    ///
+    /// Carried separately because `spread` above is **gated**: when any chunk
+    /// clears the chunk-weight floor it is a weighted mean over those chunks
+    /// and so cannot fall below the floor, and when none does it is this
+    /// number instead. That makes the gated figure bimodal by construction and
+    /// useless as the input to a fitted curve. This one is measured on every
+    /// track by the same code path.
+    pub whole_track_spread: f32,
+    /// Every chunk's own spread, ungated and in time order.
+    pub chunk_spreads: Vec<f32>,
     pub chunk_agreement: f32,
     pub relative_confidence: f32,
     pub parallel_confidence: f32,
@@ -94,6 +120,9 @@ struct TrackVote {
     agreement: f32,
     chunk_keys: Vec<crate::models::ChunkKey>,
     best_profile: ProfileId,
+    whole_track_fallback: bool,
+    whole_track_spread: f32,
+    chunk_spreads: Vec<f32>,
 }
 
 /// Resolves the template voter's per-chunk votes into one track-level answer.
@@ -107,9 +136,9 @@ struct TrackVote {
 fn template_vote(input: &KeyInput<'_>, profiles: &profiles::ProfileSet) -> Result<TrackVote> {
     let whole = template::match_pcp(input.pcp, profiles)?;
     let votes = chunks::vote(input.mono, input.sample_rate, input.residual_cents, profiles)?;
-    let (distribution, spread, agreement) = match chunks::aggregate(&votes) {
-        Some(a) => (a.probabilities, a.spread, a.agreement),
-        None => (whole.probabilities, whole.spread, 1.0),
+    let (distribution, spread, agreement, fallback) = match chunks::aggregate(&votes) {
+        Some(a) => (a.probabilities, a.spread, a.agreement, false),
+        None => (whole.probabilities, whole.spread, 1.0, true),
     };
     Ok(TrackVote {
         distribution,
@@ -117,6 +146,9 @@ fn template_vote(input: &KeyInput<'_>, profiles: &profiles::ProfileSet) -> Resul
         agreement,
         chunk_keys: chunks::to_chunk_keys(&votes),
         best_profile: whole.best_profile,
+        whole_track_fallback: fallback,
+        whole_track_spread: whole.spread,
+        chunk_spreads: votes.iter().map(|v| v.spread).collect(),
     })
 }
 
@@ -138,13 +170,23 @@ pub fn detect_detailed(
     // audio there was to spread over. When the model voter lands it brings its
     // own notion of how pitched the input was, and this term has to be refitted
     // over both rather than left reading one.
+    //
+    // The **whole-track** spread, not the chunk aggregate's. Both measure the
+    // same thing on the same audio, but the aggregate's is a weighted mean over
+    // the chunks that cleared `chunks::CHUNK_WEIGHT_FLOOR` and so cannot fall
+    // below that floor, while a track where none cleared it reports the
+    // whole-track figure instead. That makes the aggregate bimodal by
+    // construction — an artefact of a detection gate showing up inside the
+    // confidence — and on the 2026-11-01 fit half it is the difference between
+    // a confidence that orders real tracks by whether they are right (AUC 0.69)
+    // and one that does not (0.51).
     let seconds = if input.sample_rate == 0 {
         0.0
     } else {
         input.mono.len() as f32 / input.sample_rate as f32
     };
-    let evidence =
-        fuse::evidence_from_spread(vote.spread) * fuse::duration_support(seconds);
+    let support = fuse::duration_support(seconds);
+    let evidence = fuse::evidence_from_spread(vote.whole_track_spread) * support;
     let result = fuse::to_result(fuse::Resolution {
         fused: &fused,
         evidence,
@@ -161,6 +203,11 @@ pub fn detect_detailed(
         result,
         ambiguous,
         evidence,
+        spread: vote.spread,
+        duration_support: support,
+        whole_track_fallback: vote.whole_track_fallback,
+        whole_track_spread: vote.whole_track_spread,
+        chunk_spreads: vote.chunk_spreads,
         chunk_agreement: vote.agreement,
         best_profile: vote.best_profile,
         template: vote.distribution,

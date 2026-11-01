@@ -13,6 +13,43 @@
 //! spectral consequences — every partial landing in a different bin, every frame
 //! on a different grid, a gentle wide-Q tilt — are exercised here, which is the
 //! part a unit test can honestly own.
+//!
+//! That harness run has now happened, on real audio, and the result belongs
+//! beside these tests because it is the part they cannot reach. Twelve
+//! fit-half tracks, each perturbed eight ways through ffmpeg and re-analysed
+//! (144 cases at the amplitude §7.3 states: ±6 dB gain, MP3 320/192/128,
+//! 44.1 -> 48 kHz, and one gentle ±1 dB wide-Q move — a 200 Hz shelf, a 4 kHz
+//! shelf, a Q = 0.7 bell at 1 kHz, each way):
+//!
+//! * **±6 dB gain and the resample move energy by exactly 0** on all twelve.
+//!   That is the loudness trap staying shut, and it is the assertion this file
+//!   makes exactly rather than within ±1.
+//! * **MP3 at all three bitrates stays inside ±1** on all thirty-six.
+//! * **The EQ cases are inside ±1 on 70 of 72**, and both exceptions are the
+//!   same track: a 1 dB bass cut and a 1 dB bell take it 7 -> 5. Its downbeat
+//!   phase *flips* under that shelf — S8 reports phase 1 of 4 at confidence
+//!   0.08 on the original and phase 2 of 4 at 0.79 on the perturbed copy — so
+//!   every bar window moves by a beat and the per-bar features are measuring
+//!   different bars. The instability is in the grid, upstream of S10; energy
+//!   inherits it because [`super::features::bar_windows`] reads the downbeats.
+//!   No value of σ removes it: widening σ shrinks the library's own spread in
+//!   `raw` and the decile ladder recompresses by the same factor, so the ratio
+//!   of perturbation drift to bin width is a property of the features, not of
+//!   the calibration (swept σ floors from 1× to 12× the measured per-feature
+//!   perturbation noise; the two cases survive all of them).
+//! * Model 1 drifted by at most 1 across the same 144 cases — and that is not
+//!   the compliment it looks like. Eight of those twelve tracks read **10**
+//!   under model 1 and three quarters of the corpus sat in bands 8-10, so a
+//!   perturbation had nowhere to move. **An invariance test passes trivially on
+//!   a constant function.** Any scale that spreads a real library over ten bins
+//!   has bins one decile wide, and one decile is close to what these features
+//!   can reproduce under an EQ move.
+//!
+//! So the open item is not a constant in [`super::constants`]: it is the
+//! downbeat-phase stability of S8 on tracks where it has no phase information,
+//! and, second, `high_ratio` — a 1 dB treble shelf moves it by 21% at the 90th
+//! percentile, which is the worst repeatability of the seven and makes it the
+//! feature most worth redefining.
 
 use crate::analysis::energy::{self, constants, score};
 use crate::analysis::structure::{self, fixture};

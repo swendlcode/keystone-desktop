@@ -29,23 +29,71 @@ pub const DEFAULT_WEIGHTS: FusionWeights = FusionWeights { skey: 0.6, template: 
 /// exactly Camelot's A/B letter and the thing a DJ actually sees. A DJ would
 /// rather see acknowledged ambiguity than a confident wrong letter, and the
 /// incumbent does not offer that.
-pub const MODE_AMBIGUITY_THRESHOLD: f32 = 0.6;
+///
+/// **Fitted 2026-11-01** on the fit half (532 tracks) of the Mixed In Key
+/// corpus described in `docs/ACCURACY.md` §1. It was 0.6, which fired on 4.5%
+/// of real tracks while the letter was still only 66% right up to 0.80: mode
+/// agreement runs 62.5% below 0.60, 65.6% in [0.60, 0.70), 69.1% in [0.70,
+/// 0.80) and 88.0% at or above 0.80. The gate goes where the letter becomes
+/// trustworthy, not where the split becomes grotesque. Refitting means
+/// re-running that band table, and a profile or `SOFTMAX_TEMPERATURE` change
+/// invalidates it.
+pub const MODE_AMBIGUITY_THRESHOLD: f32 = 0.80;
 
 /// Spread (see `template::TemplateVote::spread`) at or below which the chroma
 /// says nothing about key at all, and above which it says everything it is
 /// going to. Between them the evidence term ramps linearly.
 ///
-/// Measured through this pipeline on synthetic material: percussion and a
-/// chromatic cluster sit at 0.02-0.05, diatonic progressions at 0.13-0.15. The
-/// floor sits clear of the noise band rather than halfway between, because the
-/// cost of calling a drum loop F minor is much higher than the cost of calling
-/// a sparse intro ambiguous. Provisional until calibrated on a real corpus.
-pub const SPREAD_FLOOR: f32 = 0.08;
-pub const SPREAD_FULL: f32 = 0.14;
+/// **Fitted 2026-11-01** on the fit half (532 tracks) of the corpus in
+/// `docs/ACCURACY.md` §1, against the whole-track spread, which is what
+/// `key::detect_detailed` passes in. They were 0.08 and 0.14, measured on
+/// synthetic diatonic progressions, and real records reach neither: the fit
+/// half runs min 0.0092, median 0.0370, p95 0.0773, max 0.1200, and full club
+/// tracks min 0.0125, median 0.0456, max 0.0961. A 0.08 floor therefore zeroed
+/// the evidence term — and with it the confidence — on 88% of a real library.
+///
+/// The floor is set by a constraint, not by the fit: it must stay above the
+/// spread synthetic percussion reaches through this same pipeline, because
+/// refusing a drum loop is a product promise and not a tuning target. Measured
+/// at eleven durations from 8 s to 120 s that band is **0.0117-0.0132** and does
+/// not shrink with more audio, so 0.014 is the smallest round number clear of it.
+///
+/// **The two bands overlap, so the floor is a price and not a separation.** The
+/// thinnest real full track on the fit half sits at 0.0125, inside the
+/// percussion band, so 0.014 hard-refuses 6.0% of real tracks (1.7% of full
+/// ones) to keep the drum-loop promise — and a uniform chromatic wash, at
+/// 0.0254, is the real distribution's 20th percentile and is not separated at
+/// all. See [`AMBIGUOUS_CONFIDENCE_FLOOR`] for what that costs.
+///
+/// `SPREAD_FULL` is fitted: AUC against exact agreement is flat (0.685-0.688
+/// pooled) from 0.030 to 0.040 and falls away above, so 0.040 is the top of
+/// that plateau and its exact value is not load-bearing.
+pub const SPREAD_FLOOR: f32 = 0.014;
+pub const SPREAD_FULL: f32 = 0.040;
 
 /// Below this the result is reported as ambiguous: no key badge, not a wrong
 /// one. Percussive, atonal, live and rubato material is meant to land here.
-pub const AMBIGUOUS_CONFIDENCE_FLOOR: f32 = 0.25;
+///
+/// **Fitted 2026-11-01** on the fit half (532 tracks) of the corpus in
+/// `docs/ACCURACY.md` §1, against one stated criterion: a Camelot badge earns
+/// its place when mixing on it works, which is the wheel's own rule — the same
+/// code, one step either way with the same letter, or the relative. The floor
+/// is the largest value at which the set it refuses is still **below even** on
+/// that measure, so nothing useful is thrown away. The refused set is 46.8%
+/// mixable at 0.08, 47.8% at 0.10, 49.0% at 0.11 and 50.5% at 0.12, where it
+/// crosses. The curve is flat across all of that, so this is a choice made on a
+/// criterion and not a peak found in the data.
+///
+/// It was 0.25, fitted on nothing. One consequence of moving it is known and
+/// not hidden: a uniform chromatic wash reaches 0.20-0.26 through the refit
+/// gates (20 s to 120 s) and is now shown a key, which the old floor refused by
+/// accident rather than by design. Restoring that refusal through
+/// `SPREAD_FLOOR` needs 0.026, costing 15.3% of full tracks their badge instead
+/// of 1.7%. The fix belongs in the front end:
+/// `template::match_chroma` standardises its similarities, so a near-flat
+/// chroma still yields a peaked distribution and neither the separation nor the
+/// top probability can tell it from a decision.
+pub const AMBIGUOUS_CONFIDENCE_FLOOR: f32 = 0.12;
 
 /// The floor the chunk-agreement multiplier cannot go below. A track that
 /// modulates is not unanalysable, so disagreement scales confidence down rather
@@ -112,6 +160,10 @@ pub fn duration_support(seconds: f32) -> f32 {
 }
 
 /// Maps the spread of the candidate scores onto [0, 1].
+///
+/// The **confidence** evidence term and nothing else: `chunks` has its own gate
+/// on the same quantity, left on the synthetic constants because that one picks
+/// which chunks vote and so belongs to detection.
 pub fn evidence_from_spread(spread: f32) -> f32 {
     if !spread.is_finite() || spread <= SPREAD_FLOOR {
         return 0.0;

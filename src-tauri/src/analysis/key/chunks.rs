@@ -29,6 +29,33 @@ use crate::models::ChunkKey;
 
 pub const CHUNK_SECONDS: f32 = 15.0;
 
+/// The gate on a chunk's own spread that decides whether it votes, and with
+/// what weight.
+///
+/// **Deliberately not the confidence gate.** These are the original
+/// synthetic-derived numbers that `fuse::SPREAD_FLOOR` and `SPREAD_FULL` used
+/// to carry, kept here under their own name because this gate chooses which
+/// chunks enter the aggregate and therefore **decides the key**, while the
+/// confidence gate only decides how loudly the answer is stated. The 2026-11-01
+/// calibration refit the second and left the first exactly where it was, so
+/// that run changed no estimate on any of the 1,063 tracks and the agreement
+/// figures in `docs/ACCURACY.md` §3 still describe this engine.
+///
+/// That does not make it right, and it is probably the next thing to look at:
+/// on the fit half no chunk cleared this floor on 63.7% of tracks, so the
+/// whole-track PCP decided those and the chunk machinery contributed nothing
+/// at all. Moving it is a detection change and needs its own measurement.
+pub const CHUNK_WEIGHT_FLOOR: f32 = 0.08;
+pub const CHUNK_WEIGHT_FULL: f32 = 0.14;
+
+/// How much this chunk's vote counts, in [0, 1]. See [`CHUNK_WEIGHT_FLOOR`].
+pub fn chunk_weight(spread: f32) -> f32 {
+    if !spread.is_finite() || spread <= CHUNK_WEIGHT_FLOOR {
+        return 0.0;
+    }
+    ((spread - CHUNK_WEIGHT_FLOOR) / (CHUNK_WEIGHT_FULL - CHUNK_WEIGHT_FLOOR)).clamp(0.0, 1.0)
+}
+
 /// Below this a chunk has too few chroma frames to mean anything — at hop
 /// 16384 a 3 s window is eight frames.
 pub const MIN_CHUNK_SECONDS: f32 = 3.0;
@@ -105,7 +132,7 @@ pub fn vote(
 
 /// Combines the chunk votes, each weighted by how much it had to say.
 ///
-/// Returns `None` when no chunk cleared the evidence floor — percussion,
+/// Returns `None` when no chunk cleared [`CHUNK_WEIGHT_FLOOR`] — percussion,
 /// silence, an atonal ambient wash. The caller must treat that as "no answer"
 /// rather than falling through to an unweighted mean, which would manufacture
 /// confidence out of noise.
@@ -114,7 +141,7 @@ pub fn aggregate(votes: &[ChunkVote]) -> Option<Aggregate> {
     let mut total_weight = 0.0f32;
     let mut weighted_spread = 0.0f32;
     for v in votes {
-        let w = fuse::evidence_from_spread(v.spread);
+        let w = chunk_weight(v.spread);
         if w <= 0.0 {
             continue;
         }
@@ -134,7 +161,7 @@ pub fn aggregate(votes: &[ChunkVote]) -> Option<Aggregate> {
     let (winner, _) = probabilities.best();
     let mut agreeing = 0.0f32;
     for v in votes {
-        let w = fuse::evidence_from_spread(v.spread);
+        let w = chunk_weight(v.spread);
         if w <= 0.0 {
             continue;
         }

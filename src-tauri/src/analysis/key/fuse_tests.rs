@@ -61,9 +61,43 @@ fn no_evidence_means_no_confidence_however_peaked_the_distribution() {
     // A drum loop can still produce a peaked-looking distribution; without
     // evidence that the material is pitched, it means nothing.
     assert_eq!(confidence(&peaked(3, 0.95), 0.0, 1.0), 0.0);
-    assert_eq!(evidence_from_spread(0.02), 0.0);
+    // Pinned to the gates rather than to literals, because the 2026-11-01
+    // calibration moved them an order of magnitude and a literal here would
+    // have silently become a test of nothing. The band below the floor is
+    // where synthetic percussion lives (0.0117-0.0132 through this pipeline);
+    // the one above `SPREAD_FULL` is where a bare diatonic progression lives.
+    assert_eq!(evidence_from_spread(SPREAD_FLOOR), 0.0);
+    assert_eq!(evidence_from_spread(SPREAD_FLOOR * 0.5), 0.0);
     assert_eq!(evidence_from_spread(f32::NAN), 0.0);
+    assert_eq!(evidence_from_spread(SPREAD_FULL), 1.0);
     assert_eq!(evidence_from_spread(0.5), 1.0);
+    // Monotone and strictly between the two, so the ramp is a ramp.
+    let mid = evidence_from_spread((SPREAD_FLOOR + SPREAD_FULL) * 0.5);
+    assert!((0.0..1.0).contains(&mid) && mid > 0.0, "mid-ramp evidence {mid}");
+}
+
+#[test]
+fn the_fitted_gates_still_bracket_what_they_were_fitted_to() {
+    // The one thing a later edit must not do quietly. `SPREAD_FLOOR` is held
+    // above the spread synthetic percussion reaches and below the thinnest real
+    // full track on the 2026-11-01 fit half, and there is almost nothing
+    // between those two — see the constant's own note. If a change to the
+    // profiles, to `template::SOFTMAX_TEMPERATURE` or to the chroma front end
+    // moves either band, this fails and the calibration has to be re-run
+    // rather than nudged.
+    // Percussion reaches 0.0132 through this pipeline at its worst duration,
+    // and 0.0176 is the 5th percentile of real full tracks on the fit half, so
+    // the floor lives in that gap and the gap is 0.004 wide.
+    assert!(SPREAD_FLOOR > 0.0132, "the floor no longer refuses percussion");
+    assert!(SPREAD_FLOOR < 0.0176, "the floor now refuses one real full track in twenty");
+    assert!(SPREAD_FULL > SPREAD_FLOOR);
+    // The refusal floor has to sit inside the range the product of the three
+    // terms can reach, or it is either never or always triggered.
+    assert!((0.0..1.0).contains(&AMBIGUOUS_CONFIDENCE_FLOOR));
+    assert!(AMBIGUOUS_CONFIDENCE_FLOOR > 0.0);
+    // And a letter is only claimed when the relative pair is decided, which is
+    // a majority plus a margin and never a bare majority.
+    assert!(MODE_AMBIGUITY_THRESHOLD > 0.5);
 }
 
 #[test]

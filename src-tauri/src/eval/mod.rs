@@ -26,8 +26,10 @@
 //!   for the engine, not the engine's number.
 
 pub mod corpus;
+pub mod energy_features;
 pub mod giantsteps;
 pub mod key_path;
+pub mod key_table;
 pub mod mirex;
 pub mod one_track;
 pub mod report;

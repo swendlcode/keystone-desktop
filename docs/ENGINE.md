@@ -1111,7 +1111,7 @@ opt-in flagged non-standard** — do not invent a second control.
 
 ## 7. Risks, ranked, and how key accuracy gets measured
 
-### 7.0 Status: what has actually been measured, as of 2026-10-31
+### 7.0 Status: what has actually been measured, as of 2026-11-01
 
 This section was written before the engine existed. The engine now runs S1 to S11 on a
 real file, which means several of the tests below have been performed and the rest can
@@ -1135,22 +1135,34 @@ the risks:
 - **The engine reads real audio end to end.** 1,062 of 1,063 files decoded and keyed; the
   one failure was a truncated container, reported as such. Six more were keyed and then
   refused by a later stage for want of a beat grid. Nothing was dropped silently.
-- **A real defect was found that synthetic testing could not see, and it is the
-  headline.** `key::fuse`'s `SPREAD_FLOOR` (0.08) and `SPREAD_FULL` (0.14) were fitted
-  on synthetic chords and read near zero on real records, so confidence collapses:
-  **exactly 0.000 on 64.3% of files, below the ambiguity floor on 88.4%.** The product
-  would show a DJ no key badge on almost their whole library. The answers underneath
-  those zeros are *not* bad — full club tracks in the lowest confidence band still match
-  Mixed In Key 54.91% exactly — so the ordering carries information and only the mapping
-  onto 0–1 is wrong. This is a calibration fault, it is the one unambiguous defect in the
-  run, and nothing else matters until it is fixed.
+- **A real defect was found that synthetic testing could not see, and it has since been
+  fixed.** `key::fuse`'s `SPREAD_FLOOR` (0.08) and `SPREAD_FULL` (0.14) were fitted on
+  synthetic chords and read near zero on real records, so confidence collapsed: on
+  2026-10-31, **exactly 0.000 on 64.3% of files and below the ambiguity floor on 88.4%.**
+  The product would have shown a DJ no key badge on almost their whole library. The four
+  `fuse` gates were refit on half of that corpus and the whole thing re-measured on
+  2026-11-01: refusals fall to **22.2% of the library and 11.1% of full tracks** (94.0%
+  → 10.0% on the `club` folder), with **no change whatsoever to the key estimates** —
+  key, Camelot label, tempo and tuning are bit-identical on all 1,056 tracks and the
+  shipped scorer's report is byte-identical on all six groups. The detection gate that
+  picks which chunks vote moved to `chunks::CHUNK_WEIGHT_FLOOR`/`_FULL` and kept the
+  synthetic values, which is what makes that invariance structural rather than lucky.
+  What the refit bought, did not buy, and cost: `ACCURACY.md` §4.3 (AUC against exact
+  agreement is 0.689 on full tracks, up from 0.574 — a real signal and a modest one),
+  §4.5 (nobody has yet measured that AUC on files no constant has seen) and §6.3 (nine
+  of the ten most confident disagreements used to be silent refusals and are now
+  confident single letters, so the dominant tie-break bug is user-visible). That
+  tie-break is now the top item in `ACCURACY.md` §6.5.
 - **The residual key error has a direction.** Over full-track answers with the right
   letter, 21.7% sit one step clockwise (the dominant, +7 semitones) against 5.0% on the
   subdominant — 4.3x asymmetry, so a per-track tie-break failure, not a constant
   rotation (rotating every estimate by −7 drops full tracks from 71.00 to 19.90). The
   runner-up is Mixed In Key's answer in 75% of those cases, which is the first real
   evidence that the honest-ambiguity UI earns its place rather than merely sounding
-  honest.
+  honest. That 75% was measured on the 24 tracks that had a runner-up at all under the
+  old gates; the 2026-11-01 run has 61 of them and the figure holds at **72.1%**, while
+  top-2 exact agreement on full tracks goes from 68.86% to **82.57%** simply because a
+  runner-up is now offered on 98.6% of them instead of 43.4%.
 - **Material difficulty dominates everything.** Full club tracks against isolated
   acapellas is 71.00 weighted versus 40.35. Risk 10 below has arrived on schedule.
 - **There is no minor bias.** Keystone's estimates are *less* minor than the reference
@@ -1160,23 +1172,40 @@ the risks:
   is: 88.29% integer-exact on full tracks with a 0.00–0.01 BPM median absolute error.
   The Accuracy1-to-Accuracy2 gap is 4.00 points on full tracks and 12.38 on sparse-beat
   vocals, which is §7.4's octave problem showing up exactly where it was predicted to.
-- **The measurement is stable.** 42 track identities present as two or more files
-  (usually an MP3 and an AIFF of the same recording) returned the same key on 42 of 42,
-  with a median tempo spread of 0.00 BPM. The engine is deterministic and codec-robust
-  across those pairs, so the disagreements are method differences and not run noise.
+- **The key and tempo measurements are stable; the energy one is not.** 42 track
+  identities present as two or more files (usually an MP3 and an AIFF of the same
+  recording, identical in duration) returned the same key on 42 of 42, with a median
+  tempo spread of 0.00 BPM, in both runs. The engine is deterministic and codec-robust
+  across those pairs for key and tempo, so the disagreements are method differences and
+  not run noise. **Energy is within ±1 across those copies on only 34 of 42 under model
+  2, against 40 of 42 under model 1, worst case a 7** (`ACCURACY.md` §7.3). That is
+  §7.3 test 3 run for free on real audio, it is currently failing, and it is the
+  strongest evidence that `high_ratio`, `centroid` and `low_ratio` need redefining
+  before the 1–10 ladder can claim 1-step resolution. Risk 6 below.
 - **Tuning does real work on roughly one file in six.** Median −2.5 cents, and 17.9% of
   files beyond ±20 cents. Worth recording against §2's note that Faraldo and Sha'ath
   both measured no aggregate gain on digitally-produced EDM: this corpus is not all
   digitally-produced EDM.
+
+- **NEW on 2026-11-01, and a new class of limitation: the binary now contains constants
+  fitted to one person's library.** Four gates in `key::fuse` and fourteen moments plus
+  eleven knots in `energy::constants` were fitted on half of the 1,063 files above —
+  house and pop, 89.4% minor, no classical, jazz, live or rubato material.
+  `energy::constants` states the anchor outright: a 5 is the median full track in a
+  house and pop DJ library. Nothing measures what either calibration does on a techno,
+  drum-and-bass, hip-hop, ambient or acoustic library, so risk 6's old worry about
+  having no calibration corpus is replaced by a narrower one about having only this
+  corpus. `ACCURACY.md` caveat 12 is the full statement, including which of its sections
+  are still out-of-sample (§3, §5 and §6.1) and which are not (§4 and §7.1).
 
 **Risk-by-risk deltas.** Numbering follows §7.2.
 
 | # | Change |
 |---|---|
 | 1 | Unchanged and still the deciding risk. **S-KEY has not been re-scored** — there is no bundled graph in the tree (`SkeySession::from_path` is `todo!()`), so everything measured so far is the template voter alone. Read `ACCURACY.md` §3 as a floor for the engine's eventual configuration, not as its score. |
-| 6 | Untouched. The energy quantile ladder still has no calibration corpus behind it, and the ten tracks spot-checked during the build scored 8, 9 or 10 — a scale that cannot separate those is not yet a scale. Fixing it is an `ENERGY_MODEL_VERSION` bump, so do it once, from a corpus. |
+| 6 | **Measured and recalibrated, 2026-11-01 — `ENERGY_MODEL_VERSION` is now 2.** The ladder had no corpus behind it and the diagnosis was worse than the spot check suggested: on the full-track half of the `ACCURACY.md` corpus, **160 of 176 tracks read 8, 9 or 10** under model 1, because μ and σ came from each feature's definition rather than from measurement and two of the seven features saturated (`flux_mean` above Φ = 0.98 on 99.4% of tracks, `dynamic_span` on 40.9%). μ, σ and the decile ladder are now fitted on the fit half of a corpus split in two before any audio was read, and the **held-out** half spreads across all ten values (mean 9.07 → 5.62). Spearman between the old and new `raw` is 0.957, so model 1 had the ranking and lost it in the mapping. What that did *not* fix, and what the next pass is: the §7.3 test-1 EQ case now fails by one step on 1 track in 12 — a downbeat-phase flip upstream in S8 on a track with phase confidence 0.08 — and model 1 only passed that test because the scale was flat. Numbers and method in `analysis/energy/constants.rs` and `analysis/energy/tests.rs`. |
 | 8 | **Partly measured, and its premise is reversed.** The whole pipeline ran 1,063 files in 656 s wall at six workers in a release build on an M-series machine (~1.6 tracks/s sustained, so a 20,000-track library is roughly three and a half hours here — still over the line the risk was worried about). But decode is **not** the 90% the plan assumed: measured through the finished pipeline, the structure stage's HPSS median filters cost more. `frontend/hpss.rs` is ~3.6 s of a five-minute track. The `criterion` decode benchmark exists (`benches/decode.rs`) and **has not been run against a real multi-format corpus** — it needs `KEYSTONE_BENCH_CORPUS` and reports that it was skipped rather than inventing a figure from synthetic audio. |
-| 10 | **Arrived, as predicted.** Acapellas sit 30 weighted points below full club tracks, and five had no usable beat grid at all. A thin monophonic vocal may simply not have a key the 24-class taxonomy can carry; the honest output is a refusal, but it has to be a refusal the UI *explains* rather than the current silent all-zero confidence. The awkward-material fixture set is still not assembled. |
+| 10 | **Arrived, as predicted, and the confidence refit made it worse rather than better.** Acapellas sit 30 weighted points below full club tracks, and five had no usable beat grid at all. A thin monophonic vocal may simply not have a key the 24-class taxonomy can carry; the honest output is a refusal, but it has to be a refusal the UI *explains*. Under the old gates that refusal happened by accident, as a silent all-zero confidence; under the new ones **289 of 391 acapellas (73.9%) get a badge and 120 of those (41.5%) would clash in a mix** (`ACCURACY.md` §6.5 item 5). The same refit also means a uniform twelve-note chromatic wash longer than about 20 s is shown a confident single letter, which is `ACCURACY.md` caveat 13 and the only known false positive it created. Pure percussion and silence are still hard zeros at every duration from 8 s to 120 s. The awkward-material fixture set is still not assembled, and it is now the thing standing between this risk and a fix. |
 | 12 | **Done and tested.** `core/renamer.rs` is journal-first through `db/track_repo/journal.rs`, with the preview as the undo and `recover_journal` replayed at launch. All five named hazards are pinned by tests in `core/renamer_apply_tests.rs`, which drive the wired `plan`/`apply` pair against a real database and a real directory, plus a sixth for a crash *between* the two steps of a case-only rename. |
 | 14 | Unchanged. **Every timing in this document and in `ACCURACY.md` is from an M-series Mac.** There is still no Windows measurement, and Windows is roughly two thirds of installs. |
 
@@ -1250,17 +1279,43 @@ the differentiator that does not depend on winning.
 
 ### 7.3 Validating energy without labelling thousands of tracks
 
-Five tests, cheapest first. The first two are free and automated.
+Five tests, cheapest first. The first two are free and automated. **Status as of
+2026-11-01: 1 run on real audio and failing on one case, 2 passing, 3 run for free and
+failing, 4 and 5 unrun.**
 
 1. **Invariance.** Energy must not move by more than ±1 under ±6 dB gain, MP3 320/192/128
    re-encode, 44.1↔48 kHz resample, and ±1 dB of gentle wide-Q EQ. Fifty tracks, as a
    unit test. Any feature that fails is mis-specified. **This catches the loudness trap on
    day one.**
+   *Run on real audio 2026-11-01, twelve fit-half tracks and eight perturbations each.*
+   Gain and resample drift **exactly 0**, so the loudness trap is shut and no feature is
+   secretly a level. MP3 re-encode within ±1 on 36 of 36. The ±1 dB wide-Q EQ moves are
+   within ±1 on 70 of 72; both exceptions are one track whose **downbeat phase flips**
+   under the perturbation (S8 reports phase 1 of 4 at confidence 0.08 on the original and
+   phase 2 of 4 at 0.79 on the copy), so every bar window shifts by a beat and the
+   per-bar features measure different bars. The instability is upstream in S8, not in the
+   energy constants: a sweep of a σ floor at 1× to 12× the measured perturbation noise
+   removed neither case, because widening σ shrinks the library's spread in `raw` and the
+   decile ladder recompresses by the same factor. Model 1 drifted at most 1 across the
+   same 144 cases and that was **not** a pass — eight of those twelve tracks read 10
+   under model 1, where drift is clipped by the ceiling, and an invariance test passes
+   trivially on a constant function.
 2. **Within-track ordering.** Per-section energies must satisfy `intro ≤ build ≤ drop` and
    `breakdown < drop` on tracks with unambiguous structure. The segmentation already
    exists, so this costs nothing and is a genuinely strong test.
 3. **Edit-pair test.** Radio edit vs extended mix of the same track must land within 1.
    ~100 pairs assembled out of a real library by filename matching, no listening.
+   *Partly run 2026-11-01, and failing.* The `ACCURACY.md` corpus already contains 42
+   recordings present as two separately sourced files of identical duration (an AIFF and
+   an MP3), which is the same test on a weaker perturbation than an edit. Energy lands
+   within ±1 on **34 of 42 under model 2**, against 40 of 42 under model 1, with a worst
+   case of 7 — and the AIFF copy reads higher than the MP3 copy in all twelve of the
+   worst-spread pairs. Model 1's better figure is partly the ceiling artefact above (the
+   raw difference on the worst pair was already 0.195 and simply did not cross a knot),
+   but the gap did genuinely widen to 0.400 because model 2's σ is tighter on five of the
+   seven features. Full numbers in `ACCURACY.md` §7.3. The real edit-pair set is still
+   not assembled, and the 42 pairs are already enough to say the ladder does not yet
+   support the 1-step resolution it claims.
 4. **Pairwise human anchors.** ~300 random pairs stratified across the range, forced
    choice, "which is more intense in a club" — about 45 minutes of listening. Score with
    **Kendall's tau**; **target tau ≥ 0.6, and below 0.45 the formula is wrong rather than

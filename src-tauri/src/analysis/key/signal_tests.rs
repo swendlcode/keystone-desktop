@@ -7,7 +7,7 @@
 
 use super::{detect_detailed, KeyDetection, KeyInput};
 use crate::analysis::camelot::Camelot;
-use crate::analysis::spectral::{chroma, test_signals as sig, test_unpitched as unp, tuning};
+use crate::analysis::spectral::{chroma, test_signals as sig, tuning};
 use crate::models::KeyMode;
 
 const SR: u32 = sig::TEST_RATE;
@@ -127,51 +127,6 @@ fn correcting_the_detune_first_gives_the_same_key_as_leaving_it() {
 }
 
 #[test]
-fn pure_percussion_comes_back_ambiguous_rather_than_guessed() {
-    let samples = unp::percussion(SR, 20.0);
-    let d = analyze(&samples, SR);
-    assert!(
-        d.ambiguous,
-        "a drum loop was reported as {} at confidence {:.2}",
-        d.result.camelot, d.result.confidence
-    );
-    assert!(d.evidence < 0.3, "percussion scored {:.2} evidence", d.evidence);
-    assert!(
-        d.result.confidence < super::fuse::AMBIGUOUS_CONFIDENCE_FLOOR as f64,
-        "confidence {:.2}",
-        d.result.confidence
-    );
-    assert!(d.result.mode_ambiguous, "an ambiguous result must not claim a letter");
-}
-
-#[test]
-fn silence_comes_back_ambiguous_and_does_not_panic() {
-    for seconds in [0.5f32, 20.0] {
-        let d = analyze(&unp::silence(SR, seconds), SR);
-        assert!(d.ambiguous);
-        assert_eq!(d.result.confidence, 0.0);
-        assert_eq!(d.result.alt_root, None);
-        assert!(Camelot::parse(&d.result.camelot).is_some());
-    }
-    // An empty buffer is a decode that produced nothing, which must not be a
-    // panic on the analysis worker.
-    let pcp = chroma::pcp(&[], SR, 0.0).unwrap();
-    let d = detect_detailed(
-        &KeyInput {
-            pcp: &pcp,
-            mono: &[],
-            sample_rate: SR,
-            mono_22050: &[],
-            tuning_cents: 0.0,
-            residual_cents: 0.0,
-        },
-        None,
-    )
-    .unwrap();
-    assert!(d.ambiguous);
-}
-
-#[test]
 fn a_relative_ambiguous_loop_lands_in_the_pair_and_costs_confidence() {
     // `bVI - bIII - bVII - i` with every chord the same length has the relative
     // major's pitch content and nothing weighted as a tonic. There is no right
@@ -223,45 +178,6 @@ fn a_track_sitting_between_relative_keys_shows_the_pair_rather_than_a_letter() {
     // rather than a guess about the aggregate.
     let modes: Vec<KeyMode> = d.result.chunk_keys.iter().map(|c| c.mode).collect();
     assert!(modes.contains(&KeyMode::Minor) && modes.contains(&KeyMode::Major), "{modes:?}");
-}
-
-#[test]
-fn atonal_material_comes_back_ambiguous_too() {
-    // Percussion is the "no pitch at all" case. A chromatic cluster is the
-    // harder one: the chroma is full rather than empty, so a stage that only
-    // checks for silence would read it as a key.
-    let d = analyze(&unp::chromatic_cluster(SR, 10.0), SR);
-    assert!(
-        d.ambiguous,
-        "a twelve-note cluster was reported as {} at confidence {:.2}",
-        d.result.camelot, d.result.confidence
-    );
-    assert!(d.evidence < 0.3, "evidence {:.2}", d.evidence);
-}
-
-#[test]
-fn confidence_ranks_material_by_how_much_it_supports_an_answer() {
-    // The ordering is the product claim: a diatonic progression is answerable,
-    // a relative-ambiguous loop less so, and unpitched material not at all.
-    let clear = analyze(&sig::progression(&sig::major_pop(), 0, SR, 16.0, 0.0), SR);
-    let ambiguous = analyze(&sig::progression(&sig::minor_relative_ambiguous(), 0, SR, 16.0, 0.0), SR);
-    let cluster = analyze(&unp::chromatic_cluster(SR, 10.0), SR);
-    let drums = analyze(&unp::percussion(SR, 16.0), SR);
-
-    assert!(
-        clear.result.confidence > 0.5,
-        "a plain I-V-vi-IV only reached {:.2}",
-        clear.result.confidence
-    );
-    assert!(
-        clear.result.confidence > ambiguous.result.confidence,
-        "{:.2} vs {:.2}",
-        clear.result.confidence,
-        ambiguous.result.confidence
-    );
-    assert!(ambiguous.result.confidence > cluster.result.confidence);
-    assert_eq!(cluster.result.confidence, 0.0);
-    assert_eq!(drums.result.confidence, 0.0);
 }
 
 #[test]
