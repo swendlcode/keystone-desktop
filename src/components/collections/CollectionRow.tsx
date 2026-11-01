@@ -143,6 +143,7 @@ function useRowDrop({
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
     setOver(null);
+    useCollectionStore.getState().setDraggingTracks(null);
     const dragged = e.dataTransfer.getData(COLLECTION_ID_MIME);
     if (dragged && dragged !== id) {
       onReorder(dragged, id);

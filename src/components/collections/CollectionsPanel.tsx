@@ -29,6 +29,7 @@ export function CollectionsPanel() {
   const selectCollection = useLibraryStore((s) => s.selectCollection);
   const creating = useCollectionStore((s) => s.creating);
   const setCreating = useCollectionStore((s) => s.setCreating);
+  const dragging = useCollectionStore((s) => s.draggingTracks);
 
   const create = useCreateCollection();
   const rename = useRenameCollection();
@@ -51,8 +52,21 @@ export function CollectionsPanel() {
     <>
       <PanelHeader onNew={() => setCreating(true)} />
 
-      <ScrollArea className="min-h-0 flex-1 px-3 pb-3">
+      {/* Ringed while a drag is in the air, so the destination is visible
+          before the pointer reaches it rather than only once it is on top of
+          a row. The drag worked before this; nothing on screen said so. */}
+      <ScrollArea
+        className={`min-h-0 flex-1 px-3 pb-3 transition-colors ${
+          dragging ? 'rounded-md bg-keystone-lime/[0.06] ring-1 ring-inset ring-keystone-lime/40' : ''
+        }`}
+      >
         {creating && <NewCollectionField onCreate={(name) => create.mutate(name)} />}
+
+        {dragging && collections.length === 0 && (
+          <p className="mt-2 px-1 text-[11px] leading-relaxed text-gray-400">
+            No collections yet — make one with + above, then drop onto it.
+          </p>
+        )}
 
         <div className="mt-1.5 flex flex-col gap-0.5">
           {collections.map((c) => (
@@ -86,9 +100,14 @@ export function CollectionsPanel() {
 }
 
 function PanelHeader({ onNew }: { onNew: () => void }) {
+  const dragging = useCollectionStore((s) => s.draggingTracks);
   return (
     <div className="flex items-center justify-between px-3 pt-2.5">
-      <span className="label">Collections</span>
+      <span className="label">
+        {dragging
+          ? `Drop ${dragging} ${dragging === 1 ? 'track' : 'tracks'} on a collection`
+          : 'Collections'}
+      </span>
       <button
         type="button"
         aria-label="New collection"

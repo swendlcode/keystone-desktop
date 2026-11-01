@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { setTrackDrag } from '../collections/dragTypes';
 import type { TrackWindow } from './useTrackWindow';
+import { useCollectionStore } from '../../stores/collectionStore';
 import { useLibraryStore } from '../../stores/libraryStore';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -83,10 +84,14 @@ export function useRowInteraction(window: TrackWindow, autoPlay: boolean) {
     const track = winRef.current.trackAt(index);
     if (!track) return;
     const selected = useLibraryStore.getState().selectedIds;
-    setTrackDrag(
-      e.dataTransfer,
-      selected.has(track.id) ? [...selected] : [track.id],
-    );
+    const ids = selected.has(track.id) ? [...selected] : [track.id];
+    setTrackDrag(e.dataTransfer, ids);
+    // Lights the collections, so the drag has somewhere visibly to go.
+    useCollectionStore.getState().setDraggingTracks(ids.length);
+  }, []);
+
+  const onRowDragEnd = useCallback(() => {
+    useCollectionStore.getState().setDraggingTracks(null);
   }, []);
 
   const onRowContextMenu = useCallback((e: React.MouseEvent, index: number) => {
@@ -113,6 +118,7 @@ export function useRowInteraction(window: TrackWindow, autoPlay: boolean) {
     onRowMouseDown,
     onRowDoubleClick,
     onRowDragStart,
+    onRowDragEnd,
     onRowContextMenu,
   };
 }

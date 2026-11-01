@@ -5,6 +5,7 @@ use tauri::{Emitter, State};
 
 use crate::commands::blocking;
 use crate::core::{scanner, IndexJob, Indexer, JobPriority, ScannedFile, Scanner};
+use crate::state::jobs::AnalysisQueue;
 use crate::error::{KeystoneError, Result};
 use crate::events;
 use crate::models::{CleanCacheReport, LibraryFolder, ReconcileReport, ScanProgress, WatchedFolder};
@@ -26,7 +27,7 @@ pub async fn add_watched_folder(path: String, state: State<'_, AppState>) -> Res
     let folder = blocking(move || library.add_watched(&upsert_path)).await?;
 
     state.watcher.watch(&root)?;
-    spawn_scan(state.indexer.clone(), root);
+    spawn_scan(state.indexer.clone(), root, state.queue.clone());
     Ok(folder)
 }
 
@@ -54,15 +55,18 @@ pub async fn get_watched_folders(state: State<'_, AppState>) -> Result<Vec<Watch
 #[tauri::command]
 pub async fn scan_folder(path: String, state: State<'_, AppState>) -> Result<usize> {
     let indexer = state.indexer.clone();
-    blocking(move || {
-        indexer.reset_counters();
+    let walker = indexer.clone();
+    let found = blocking(move || {
+        walker.reset_counters();
         let (files, _stats) = Scanner::scan(&PathBuf::from(path))?;
         let jobs = to_jobs(files);
         let found = jobs.len();
-        indexer.enqueue_batch(jobs);
+        walker.enqueue_batch(jobs);
         Ok(found)
     })
-    .await
+    .await?;
+    spawn_analysis_after_indexing(indexer, state.queue.clone());
+    Ok(found)
 }
 
 /// Takes whatever was dropped on the window: folders, loose audio files, or a
@@ -115,7 +119,13 @@ pub async fn add_dropped_paths(
     // Spawned after the loose files are queued so the single track a user
     // dropped to try the app out is not stuck behind a folder walk.
     for root in folders {
-        spawn_scan(state.indexer.clone(), root);
+        spawn_scan(state.indexer.clone(), root, state.queue.clone());
+    }
+
+    // Loose files are indexed without a walk, so nothing above would have
+    // reached the analysis queue for them.
+    if found > 0 {
+        spawn_analysis_after_indexing(state.indexer.clone(), state.queue.clone());
     }
 
     Ok(found)
@@ -169,13 +179,54 @@ pub async fn get_library_folders(state: State<'_, AppState>) -> Result<Vec<Libra
 /// The walk runs in the background, so ADD TRACKS returns as soon as the root is
 /// recorded. A 20,000-track folder is minutes of walking and the rows appear in
 /// the table as the IO stage commits them.
-fn spawn_scan(indexer: Arc<Indexer>, root: PathBuf) {
+fn spawn_scan(indexer: Arc<Indexer>, root: PathBuf, queue: Arc<AnalysisQueue>) {
     tauri::async_runtime::spawn(async move {
+        let scanner = indexer.clone();
         let _ = tauri::async_runtime::spawn_blocking(move || {
-            indexer.reset_counters();
+            scanner.reset_counters();
             match Scanner::scan(&root) {
-                Ok((files, _stats)) => indexer.enqueue_batch(to_jobs(files)),
+                Ok((files, _stats)) => scanner.enqueue_batch(to_jobs(files)),
                 Err(e) => tracing::warn!("the walk of {} failed: {}", root.display(), e),
+            }
+        })
+        .await;
+        spawn_analysis_after_indexing(indexer, queue);
+    });
+}
+
+/// Hands newly indexed rows to the analysis queue once the walk has landed.
+///
+/// Indexing and analysis are two stages that did not know about each other.
+/// The indexer wrote rows and stopped; the queue only ever learned about
+/// unanalysed rows from `enqueue_pending` at startup. So anything added while
+/// the app was running — a dropped file, a newly watched folder — sat in the
+/// table with no key, tempo or energy until the next launch, and the analysis
+/// strip never moved. That looked like analysis was broken, and for anything
+/// added after launch it was.
+///
+/// It has to wait: the rows do not exist at the moment the index jobs are
+/// enqueued, so asking the queue then finds nothing to do. Polling the
+/// indexer's own idle flag is the cheap way to know they have landed, and
+/// `enqueue_pending` is idempotent — a row already queued or already analysed
+/// is not queued twice — so an early or repeated call costs nothing.
+fn spawn_analysis_after_indexing(indexer: Arc<Indexer>, queue: Arc<AnalysisQueue>) {
+    tauri::async_runtime::spawn(async move {
+        // Up to two minutes of waiting, then enqueue whatever has landed. A
+        // walk of a very large folder can outlast this; the next pass picks
+        // up the remainder, which is better than waiting forever on a scan
+        // that was cancelled.
+        for _ in 0..240 {
+            if !indexer.progress().is_scanning {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+
+        let _ = tauri::async_runtime::spawn_blocking(move || {
+            match queue.enqueue_pending() {
+                Ok(0) => {}
+                Ok(n) => tracing::info!("queued {n} newly indexed tracks for analysis"),
+                Err(e) => tracing::warn!("could not queue new tracks for analysis: {e}"),
             }
         })
         .await;

@@ -113,6 +113,7 @@ export function TrackTable({ window: win, onPageChange }: TrackTableProps) {
                     onRowMouseDown={rows.onRowMouseDown}
                     onRowDoubleClick={rows.onRowDoubleClick}
                     onRowDragStart={rows.onRowDragStart}
+                    onRowDragEnd={rows.onRowDragEnd}
                     onRowContextMenu={rows.onRowContextMenu}
                     onRate={onRate}
                   />
