@@ -8,6 +8,7 @@ import { useWaveform } from '../../hooks/useAnalysis';
 import { useCuePoints } from '../../hooks/useCues';
 import { useEffectiveSettings } from '../../hooks/useSettings';
 import { MAX_ZOOM, usePlayerStore } from '../../stores/playerStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import type { Track } from '../../types';
 
 interface WaveformViewProps {
@@ -40,6 +41,13 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
   const storeDuration = usePlayerStore((s) => s.duration);
   const zoom = usePlayerStore((s) => s.zoom);
   const viewCentreS = usePlayerStore((s) => s.viewCentreS);
+  // Not used in the markup — it is a redraw trigger. `waveColors()` reads the
+  // theme's custom properties at draw time, and the canvas is pixels rather
+  // than styled DOM, so a theme flip repaints every element around it and
+  // leaves the waveform painted in the colours of the theme that just left.
+  // It stayed wrong until something else happened to invalidate the draw,
+  // which is why it only glitched sometimes.
+  const theme = useSettingsStore((s) => s.theme);
 
   const durationS =
     storeDuration || (wave?.durationMs ?? track.durationMs ?? 0) / 1000;
@@ -99,7 +107,7 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
       height: canvas.height,
       ...waveColors(),
     });
-  }, [wave, size, win.startS, win.endS, currentTime]);
+  }, [wave, size, win.startS, win.endS, currentTime, theme]);
 
   const seekFromClientX = (clientX: number) => {
     const rect = boxRef.current?.getBoundingClientRect();

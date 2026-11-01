@@ -116,6 +116,29 @@ const HEADROOM = 0.88;
  */
 const GHOST_RADIUS_PX = 7;
 
+/**
+ * Half-width, in device pixels, of the trough the bright layer is measured
+ * against.
+ *
+ * Small — a few pixels either side, which at full zoom-out is a fraction of
+ * a beat. It has to be narrower than the gap between kicks, or the trough it
+ * finds is another kick's and every hit measures as flat.
+ */
+const BEAT_RADIUS_PX = 4;
+
+/**
+ * How the bright layer is mixed from the sustained level and the transient.
+ *
+ * A modern club master is limited to within a hair of full scale, so peak
+ * height says almost nothing — a breakdown and a drop draw the same
+ * rectangle. What still moves is how far each column RISES above the quiet
+ * just before it, which is exactly what a drum hit is. The bright layer is
+ * mostly that rise, plus a little of the sustained level so the body does
+ * not collapse to a line between hits.
+ */
+const SUSTAIN_SHARE = 0.3;
+const TRANSIENT_GAIN = 1.6;
+
 interface Envelope {
   tops: Float32Array;
   bottoms: Float32Array;
@@ -208,8 +231,15 @@ function measureEnvelope(
     lo[x] = peak ? peak.min : 0;
   }
 
+  // The ghost is the whole song: a max over a wide window, so it bridges the
+  // gaps between hits and draws the arrangement.
   const ghostHi = slidingMax(hi, GHOST_RADIUS_PX);
   const ghostLo = slidingMin(lo, GHOST_RADIUS_PX);
+
+  // The bright layer is the drums: each column measured against the quiet
+  // immediately around it rather than against full scale.
+  const floorHi = slidingMin(hi, BEAT_RADIUS_PX);
+  const floorLo = slidingMax(lo, BEAT_RADIUS_PX);
 
   const scale = mid * HEADROOM;
   const tops = new Float32Array(width);
@@ -218,8 +248,20 @@ function measureEnvelope(
   const ghostBottoms = new Float32Array(width);
 
   for (let x = 0; x < width; x += 1) {
-    let top = mid - hi[x] * scale;
-    let bottom = mid - lo[x] * scale;
+    // Never taller than the real peak: a transient is being emphasised, not
+    // invented, and a bright layer poking out of its own ghost would be the
+    // drawing contradicting itself.
+    const beatHi = Math.min(
+      hi[x],
+      floorHi[x] * SUSTAIN_SHARE + (hi[x] - floorHi[x]) * TRANSIENT_GAIN,
+    );
+    const beatLo = Math.max(
+      lo[x],
+      floorLo[x] * SUSTAIN_SHARE + (lo[x] - floorLo[x]) * TRANSIENT_GAIN,
+    );
+
+    let top = mid - beatHi * scale;
+    let bottom = mid - beatLo * scale;
     if (bottom - top < MIN_THICKNESS) {
       top = mid - MIN_THICKNESS / 2;
       bottom = mid + MIN_THICKNESS / 2;
