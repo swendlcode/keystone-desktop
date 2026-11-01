@@ -47,32 +47,6 @@
 //!   must run **Rescan ID3 Tags** in the Files panel. Without that sentence in
 //!   the UI, the feature gets reported as broken by people for whom it worked.
 
-use crate::error::Result;
-use crate::export::ExportTrack;
-
-/// Markers2 base64 wraps at 72 characters.
-pub const MARKERS2_LINE_WIDTH: usize = 72;
-/// Minimum null-padded Markers2 length.
-pub const MARKERS2_MIN_BYTES: usize = 470;
-/// `Markers_` is fixed at 14 slots: the first 5 cues then 9 loops. Writing
-/// fewer silently destroys the user's loops.
-pub const MARKERS_LEGACY_SLOTS: usize = 14;
-pub const MARKERS_LEGACY_CUES: usize = 5;
-/// Serato reads only this many cues from the MP4 `markers` field.
-pub const MP4_LEGACY_CUE_LIMIT: usize = 5;
-
-pub fn write_markers2(_track: &ExportTrack, _existing: Option<&[u8]>) -> Result<Vec<u8>> {
-    todo!("v1.1 — owes: Markers2 serialisation, preserving unknown entry types verbatim")
-}
-
-pub fn write_markers_legacy(_track: &ExportTrack, _existing: Option<&[u8]>) -> Result<Vec<u8>> {
-    todo!("v1.1 — owes: the fixed 14-slot Markers_ block in serato32 packing")
-}
-
-pub fn write_beatgrid(_track: &ExportTrack) -> Result<Vec<u8>> {
-    todo!("v1.1 — owes: Serato BeatGrid serialisation")
-}
-
-pub fn write_autotags(_track: &ExportTrack) -> Result<Vec<u8>> {
-    todo!("v1.1 — owes: Serato Autotags serialisation")
-}
+pub mod grid;
+pub mod markers;
+pub mod serato32;
