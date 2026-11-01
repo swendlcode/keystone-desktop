@@ -7,6 +7,7 @@ import {
   SearchZoomOut,
   Stop,
 } from '../ui/icons';
+import { VolumeControl } from './VolumeControl';
 import { MAX_ZOOM, usePlayerStore } from '../../stores/playerStore';
 import { formatTime } from '../../utils/formatters';
 
@@ -101,6 +102,8 @@ export function WaveformMeta({ totalS }: { totalS: number }) {
         >
           <SearchZoomIn size={13} color="currentColor" variant="Linear" />
         </MetaButton>
+        <span className="mx-0.5 h-3.5 w-px bg-gray-700" aria-hidden />
+        <VolumeControl />
       </span>
     </div>
   );

@@ -10,7 +10,7 @@ import {
   Trash,
 } from '../ui/icons';
 import { keystoneService } from '../../services/keystoneService';
-import { usePlayerStore } from '../../stores/playerStore';
+import { forgetTracks, usePlayerStore } from '../../stores/playerStore';
 import type { MenuItem } from '../ui/menuItem';
 import type { ExportTarget, Settings, Track } from '../../types';
 import type { ConfirmRequest } from './useTrackMenu';
@@ -175,7 +175,11 @@ export function removeItem({ track, targetIds, refresh, ask }: MenuContext): Men
           ? 'They leave Keystone. The files on disk are untouched.'
           : 'It leaves Keystone. The file on disk is untouched.',
         confirmLabel: 'Remove',
-        run: () => void keystoneService.removeTracks(targetIds).then(refresh),
+        run: () =>
+          void keystoneService.removeTracks(targetIds).then(() => {
+            forgetTracks(targetIds);
+            refresh();
+          }),
       }),
   };
 }

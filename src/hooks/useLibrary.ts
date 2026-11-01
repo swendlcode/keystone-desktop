@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { keystoneService } from '../services/keystoneService';
 import { useLibraryStore } from '../stores/libraryStore';
+import { forgetTracks } from '../stores/playerStore';
 import {
   KeystoneEvent,
   type KeyMode,
@@ -185,9 +186,13 @@ export function useRemoveTracks() {
   const qc = useQueryClient();
   const clearSelection = useLibraryStore((s) => s.clearSelection);
   return useMutation({
-    mutationFn: (ids: string[]) => keystoneService.removeTracks(ids),
-    onSuccess: () => {
+    mutationFn: (ids: string[]) =>
+      keystoneService.removeTracks(ids).then(() => ids),
+    onSuccess: (ids) => {
       clearSelection();
+      // The transport is not part of the library's cache, so invalidating
+      // the rows leaves a removed track playing over an empty table.
+      forgetTracks(ids);
       qc.invalidateQueries({ queryKey: trackKeys.all });
     },
   });

@@ -19,7 +19,7 @@ export function PlaybackError() {
   if (!error) return null;
 
   return (
-    <span className="pointer-events-none absolute inset-x-3 bottom-0 z-40 flex items-center gap-1.5 rounded-t-md bg-gray-900/95 px-2 py-1 text-[11px] text-amber-400">
+    <span className="pointer-events-none absolute bottom-1 left-1 z-40 flex max-w-[70%] items-center gap-1.5 rounded bg-gray-900/90 px-2 py-1 text-[11px] text-amber-400">
       <Warning2 size={12} color="currentColor" variant="Linear" className="shrink-0" />
       <span className="truncate" title={error}>
         {error}

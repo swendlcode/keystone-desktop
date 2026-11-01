@@ -3,6 +3,7 @@ import { TitleBar } from './components/layout/TitleBar';
 import { Sidebar } from './components/layout/Sidebar';
 import { SidebarResizer } from './components/layout/SidebarResizer';
 import { MainPanel } from './components/layout/MainPanel';
+import { ViewTabs } from './components/layout/ViewTabs';
 import { StatusBar } from './components/layout/StatusBar';
 import { DropOverlay } from './components/layout/DropOverlay';
 import { PlayerBar } from './components/player/PlayerBar';
@@ -40,6 +41,10 @@ export default function App() {
         <Sidebar />
         <SidebarResizer />
         <MainPanel>
+          {/* The column's own header. Library / Tags switch what this column
+              shows, so they sit at the top of it rather than in the window
+              bar that spans the sidebar as well. */}
+          <ViewTabs />
           <PlayerBar />
           <Suspense fallback={<div className="flex-1" />}>
             {view === 'library' && <LibraryPage />}

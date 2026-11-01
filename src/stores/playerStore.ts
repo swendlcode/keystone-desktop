@@ -200,9 +200,33 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setDraggingCueSlot: (draggingCueSlot) => set({ draggingCueSlot }),
   setLoadError: (loadError) => set({ loadError }),
   clearCurrent: () =>
-    set({ currentTrack: null, isPlaying: false, currentTime: 0, duration: 0 }),
+    set({
+      currentTrack: null,
+      isPlaying: false,
+      currentTime: 0,
+      duration: 0,
+      viewCentreS: null,
+      loadError: null,
+    }),
 
   registerSeek: (seekTo) => set({ seekTo }),
 }));
+
+/**
+ * Drop tracks from the transport because they are no longer in the library.
+ *
+ * Removing the playing track used to leave it loaded and playing with its
+ * waveform and cues still on screen, over an empty table — the player
+ * outliving the row it came from. It also strips them from the playlist, so
+ * Next cannot walk onto a track that no longer exists.
+ */
+export function forgetTracks(ids: readonly string[]): void {
+  const gone = new Set(ids);
+  const { currentTrack, playlist, clearCurrent, setPlaylist } =
+    usePlayerStore.getState();
+
+  setPlaylist(playlist.filter((t) => !gone.has(t.id)));
+  if (currentTrack && gone.has(currentTrack.id)) clearCurrent();
+}
 
 export { MAX_ZOOM };

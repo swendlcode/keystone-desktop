@@ -70,7 +70,9 @@ export function usePlayer() {
      * button that appears dead — and the two have completely different fixes.
      */
     const onError = () => {
-      usePlayerStore.getState().setLoadError(describeMediaError(el));
+      usePlayerStore
+        .getState()
+        .setLoadError(`${describeMediaError(el)} — ${srcHint(el)}`);
       usePlayerStore.getState().pause();
     };
 
@@ -208,6 +210,28 @@ async function beginPlayback(el: HTMLAudioElement): Promise<void> {
       );
     usePlayerStore.getState().pause();
   }
+}
+
+/**
+ * The tail of the URL that failed, and the extension.
+ *
+ * `SRC_NOT_SUPPORTED` has two completely different causes — a codec the
+ * webview will not decode, and a URL it could not fetch at all — and the two
+ * are indistinguishable from the code alone. The extension settles the first
+ * and seeing the actual asset URL settles the second, so the message carries
+ * both rather than making it a guess.
+ */
+function srcHint(el: HTMLAudioElement): string {
+  if (!el.src) return 'no source was set';
+  let decoded = el.src;
+  try {
+    decoded = decodeURIComponent(el.src);
+  } catch {
+    /* leave it encoded; it is a hint either way */
+  }
+  const ext = decoded.split('.').pop()?.split(/[?#]/)[0] ?? '';
+  const tail = decoded.length > 90 ? `…${decoded.slice(-90)}` : decoded;
+  return `.${ext} · ${tail}`;
 }
 
 /** A MediaError code as something a person can act on. */

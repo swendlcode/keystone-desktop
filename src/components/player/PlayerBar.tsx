@@ -39,8 +39,7 @@ export function PlayerBar() {
     // row it changed the bar's height when it appeared, which shoved the
     // whole table down a line at the exact moment something had already gone
     // wrong.
-    <div className="relative flex shrink-0 flex-col gap-2 border-b border-gray-700 bg-gray-900 px-3 py-2.5">
-      <PlaybackError />
+    <div className="flex shrink-0 flex-col gap-2 border-b border-gray-700 bg-gray-900 px-3 py-2.5">
       <div className="flex items-center gap-3">
         <PlaybackControls />
 
@@ -53,6 +52,11 @@ export function PlayerBar() {
             </div>
           )}
           <WaveformMeta totalS={totalS} />
+          {/* Inside the waveform, bottom-left — the one area with nothing in
+              it. Pinned to the bar's bottom edge it covered the title and
+              the readout, which is worse than the layout shift it was
+              avoiding. */}
+          <PlaybackError />
         </div>
       </div>
 
