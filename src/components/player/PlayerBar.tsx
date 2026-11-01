@@ -1,4 +1,4 @@
-import { PlaybackControls } from './PlaybackControls';
+import { PlaybackControls, WaveformMeta } from './PlaybackControls';
 import { TrackReadout } from './TrackReadout';
 import { VirtualPiano } from './VirtualPiano';
 import { WaveformView } from './WaveformView';
@@ -15,10 +15,12 @@ import { trackLabel } from '../../utils/formatters';
  * has to stay mounted for the life of the window rather than per view —
  * App renders it outside the page switch for that reason.
  *
- * Layout order is SPEC.md §1's: transport, then the full-width waveform with
- * its eight markers, then `ARTIST - TITLE`, then the readout row. The waveform
- * gets its own row rather than sharing one with the transport because
- * "full-width" is what makes a cue marker draggable to a useful precision.
+ * The transport sits BESIDE the waveform rather than above it, and the clock
+ * and zoom are overlaid in the waveform's bottom-right corner. Three stacked
+ * rows — transport, waveform, readout — spent two of them on a handful of
+ * controls and left the waveform, the only element here that benefits from
+ * height, with the least of it. Beside the wave costs about 90px of width,
+ * which a cue marker does not miss, and gives the row back.
  */
 export function PlayerBar() {
   const { seek } = usePlayer();
@@ -33,15 +35,20 @@ export function PlayerBar() {
 
   return (
     <div className="flex shrink-0 flex-col gap-2 border-b border-gray-700 bg-gray-900 px-3 py-2.5">
-      <PlaybackControls totalS={totalS} />
+      <div className="flex items-center gap-3">
+        <PlaybackControls />
 
-      {track ? (
-        <WaveformView track={track} onSeek={seek} />
-      ) : (
-        <div className="relative h-[72px] w-full rounded-md bg-gray-800">
-          <span className="absolute inset-x-0 top-1/2 h-px bg-gray-700" />
+        <div className="relative min-w-0 flex-1">
+          {track ? (
+            <WaveformView track={track} onSeek={seek} />
+          ) : (
+            <div className="relative h-[84px] w-full rounded-md bg-gray-800">
+              <span className="absolute inset-x-0 top-1/2 h-px bg-gray-700" />
+            </div>
+          )}
+          <WaveformMeta totalS={totalS} />
         </div>
-      )}
+      </div>
 
       {/* `flex-wrap`: on a narrow window the readout drops to its own line
           instead of squeezing the title into an ellipsis after four words.

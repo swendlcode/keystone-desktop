@@ -14,7 +14,7 @@ interface WaveformViewProps {
   onSeek: (seconds: number) => void;
 }
 
-const HEIGHT = 72;
+const HEIGHT = 84;
 
 /**
  * The full-width waveform with its eight cue markers.
