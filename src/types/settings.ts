@@ -99,23 +99,33 @@ export const COLUMN_ORDER: TrackColumn[] = [
   'comment',
 ];
 
-/** Header labels, uppercased by `.label` in CSS rather than here. */
+/**
+ * Header labels, uppercased by `.label` in CSS rather than here.
+ *
+ * Short on purpose. These are rendered uppercase with wide letter-spacing
+ * over columns sized for their *contents* — a key badge is 76px and a cue
+ * count is 56px — so "Cover art", "Key result" and "Cue points" were all
+ * ellipsed to "CO…", "KEY RES…" and "CUE P…". A truncated header is worse
+ * than a terse one: it tells you less and looks broken doing it. The cover
+ * column has no label at all, because a thumbnail needs no heading and
+ * 34px cannot hold one.
+ */
 export const COLUMN_LABELS: Record<TrackColumn, string> = {
-  coverArt: 'Cover art',
+  coverArt: '',
   path: 'Path',
   artist: 'Artist',
   title: 'Title',
   tempo: 'Tempo',
-  keyResult: 'Key result',
+  keyResult: 'Key',
   energy: 'Energy',
-  cuePoints: 'Cue points',
-  dateAdded: 'Date added',
+  cuePoints: 'Cues',
+  dateAdded: 'Added',
   grouping: 'Grouping',
   genre: 'Genre',
   year: 'Year',
   album: 'Album',
   volume: 'Volume',
-  clippedPeaks: 'Clipped peaks',
+  clippedPeaks: 'Clipped',
   rating: 'Rating',
   bitrate: 'Bitrate',
   comment: 'Comment',

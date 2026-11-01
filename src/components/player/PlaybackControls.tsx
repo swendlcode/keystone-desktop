@@ -8,7 +8,7 @@ import {
   Stop,
 } from '../ui/icons';
 import { VolumeControl } from './VolumeControl';
-import { MAX_ZOOM, usePlayerStore } from '../../stores/playerStore';
+import { isMaxZoom, isZoomedOut, usePlayerStore } from '../../stores/playerStore';
 import { formatTime } from '../../utils/formatters';
 
 /**
@@ -89,17 +89,13 @@ export function WaveformMeta({ totalS }: { totalS: number }) {
         {formatTime(totalS)}
       </span>
       <span className="pointer-events-auto flex items-center gap-0.5 rounded bg-gray-900/80 px-0.5">
-        <MetaButton label="Zoom out" onClick={zoomOut} disabled={zoom === 0}>
+        <MetaButton label="Zoom out" onClick={zoomOut} disabled={isZoomedOut(zoom)}>
           <SearchZoomOut size={13} color="currentColor" variant="Linear" />
         </MetaButton>
-        <span className="mono tnum w-9 text-center text-[11px] text-gray-400">
-          {2 ** zoom}x
+        <span className="mono tnum w-10 text-center text-[11px] text-gray-400">
+          {formatZoom(zoom)}
         </span>
-        <MetaButton
-          label="Zoom in"
-          onClick={zoomIn}
-          disabled={zoom === MAX_ZOOM}
-        >
+        <MetaButton label="Zoom in" onClick={zoomIn} disabled={isMaxZoom(zoom)}>
           <SearchZoomIn size={13} color="currentColor" variant="Linear" />
         </MetaButton>
         <span className="mx-0.5 h-3.5 w-px bg-gray-700" aria-hidden />
@@ -107,6 +103,18 @@ export function WaveformMeta({ totalS }: { totalS: number }) {
       </span>
     </div>
   );
+}
+
+/**
+ * `1.0x`, `3.4x`, `48x`.
+ *
+ * A decimal below ten, where the difference between 3.4x and 3.9x is
+ * visible, and none above it, where it is not and the extra character only
+ * makes the readout jitter as the number grows.
+ */
+function formatZoom(zoom: number): string {
+  const factor = 2 ** zoom;
+  return factor < 10 ? `${factor.toFixed(1)}x` : `${Math.round(factor)}x`;
 }
 
 function MetaButton({

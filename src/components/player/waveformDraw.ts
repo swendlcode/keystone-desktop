@@ -49,11 +49,12 @@ export function waveWindow(
 }
 
 /**
- * The coarsest level that still has a bucket for every pixel.
+ * The coarsest level that still has several buckets for every pixel.
  *
  * Coarsest-that-suffices rather than finest-available: the finest level of a
  * ten-minute track is millions of buckets, and reducing 400 of them into one
- * pixel column costs the same as reducing 4 and looks identical.
+ * pixel column costs the same as reducing 4 and looks identical. But one
+ * bucket per pixel is NOT enough — see `BUCKETS_PER_PIXEL`.
  */
 export function pickLevel(
   wave: Waveform,
@@ -61,9 +62,10 @@ export function pickLevel(
   widthPx: number,
 ): number {
   const spanS = Math.max(window.endS - window.startS, 1e-6);
+  const wanted = widthPx * BUCKETS_PER_PIXEL;
   for (let i = 0; i < wave.levels.length; i += 1) {
     const buckets = (spanS * wave.sampleRate) / wave.levels[i].samplesPerBucket;
-    if (buckets >= widthPx) return i;
+    if (buckets >= wanted) return i;
   }
   return wave.levels.length - 1;
 }
@@ -117,27 +119,16 @@ const HEADROOM = 0.88;
 const GHOST_RADIUS_PX = 7;
 
 /**
- * Half-width, in device pixels, of the trough the bright layer is measured
- * against.
+ * Buckets to reduce into each pixel column.
  *
- * Small — a few pixels either side, which at full zoom-out is a fraction of
- * a beat. It has to be narrower than the gap between kicks, or the trough it
- * finds is another kick's and every hit measures as flat.
+ * More than one, deliberately. The coarsest level with a bucket per pixel is
+ * enough to draw a shape, but a kick's attack is a single bucket wide and
+ * landing between two of them clips the top off the spike — which reads as
+ * the drum being quieter than the bar next to it. Averaging four candidates
+ * into each column's maximum keeps the attack at its real height, and the
+ * cost is a finer level off a pyramid that is already on disk.
  */
-const BEAT_RADIUS_PX = 4;
-
-/**
- * How the bright layer is mixed from the sustained level and the transient.
- *
- * A modern club master is limited to within a hair of full scale, so peak
- * height says almost nothing — a breakdown and a drop draw the same
- * rectangle. What still moves is how far each column RISES above the quiet
- * just before it, which is exactly what a drum hit is. The bright layer is
- * mostly that rise, plus a little of the sustained level so the body does
- * not collapse to a line between hits.
- */
-const SUSTAIN_SHARE = 0.3;
-const TRANSIENT_GAIN = 1.6;
+const BUCKETS_PER_PIXEL = 4;
 
 interface Envelope {
   tops: Float32Array;
@@ -236,11 +227,6 @@ function measureEnvelope(
   const ghostHi = slidingMax(hi, GHOST_RADIUS_PX);
   const ghostLo = slidingMin(lo, GHOST_RADIUS_PX);
 
-  // The bright layer is the drums: each column measured against the quiet
-  // immediately around it rather than against full scale.
-  const floorHi = slidingMin(hi, BEAT_RADIUS_PX);
-  const floorLo = slidingMax(lo, BEAT_RADIUS_PX);
-
   const scale = mid * HEADROOM;
   const tops = new Float32Array(width);
   const bottoms = new Float32Array(width);
@@ -248,20 +234,15 @@ function measureEnvelope(
   const ghostBottoms = new Float32Array(width);
 
   for (let x = 0; x < width; x += 1) {
-    // Never taller than the real peak: a transient is being emphasised, not
-    // invented, and a bright layer poking out of its own ghost would be the
-    // drawing contradicting itself.
-    const beatHi = Math.min(
-      hi[x],
-      floorHi[x] * SUSTAIN_SHARE + (hi[x] - floorHi[x]) * TRANSIENT_GAIN,
-    );
-    const beatLo = Math.max(
-      lo[x],
-      floorLo[x] * SUSTAIN_SHARE + (lo[x] - floorLo[x]) * TRANSIENT_GAIN,
-    );
-
-    let top = mid - beatHi * scale;
-    let bottom = mid - beatLo * scale;
+    // The true peak for this column. Nothing is amplified, shaped or
+    // inferred: a kick looks like a kick because a kick IS a hard attack
+    // and a decay, and the peaks say so. An earlier pass measured each
+    // column against its neighbours and scaled the difference up, trying to
+    // make drums stand out — it invented a shape the audio does not have
+    // and turned clean hits into bumps. Where there are enough pixels for a
+    // beat, the data draws it; where there are not, nothing can.
+    let top = mid - hi[x] * scale;
+    let bottom = mid - lo[x] * scale;
     if (bottom - top < MIN_THICKNESS) {
       top = mid - MIN_THICKNESS / 2;
       bottom = mid + MIN_THICKNESS / 2;

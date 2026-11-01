@@ -7,7 +7,7 @@ import { drawWaveform, waveColors, waveSpan, waveWindow } from './waveformDraw';
 import { useWaveform } from '../../hooks/useAnalysis';
 import { useCuePoints } from '../../hooks/useCues';
 import { useEffectiveSettings } from '../../hooks/useSettings';
-import { MAX_ZOOM, usePlayerStore } from '../../stores/playerStore';
+import { isZoomedOut, MAX_ZOOM, usePlayerStore } from '../../stores/playerStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { Track } from '../../types';
 
@@ -19,13 +19,14 @@ interface WaveformViewProps {
 const HEIGHT = 84;
 
 /**
- * How much wheel delta buys one zoom step.
+ * Wheel delta for one doubling.
  *
- * Roughly one notch of a mouse wheel, which reports ~100-120 per notch, so a
- * mouse keeps its one-notch-one-step feel. A trackpad reports single digits
- * per event, so a step takes a deliberate swipe rather than a twitch.
+ * Zoom is continuous, so every event moves it by a fraction of this rather
+ * than banking up to a jump. A trackpad reports single digits per event, so
+ * a swipe scales the view smoothly; a mouse notch of ~110 is a little under
+ * half a doubling, which is a visible but not startling change.
  */
-const ZOOM_STEP_DELTA = 110;
+const ZOOM_DELTA_PER_DOUBLING = 260;
 
 /**
  * The full-width waveform with its eight cue markers.
@@ -256,8 +257,6 @@ function useWaveformWheel(
 ) {
   const durationRef = useRef(durationS);
   durationRef.current = durationS;
-  /** Wheel delta banked towards the next zoom step. */
-  const banked = useRef(0);
 
   useEffect(() => {
     const box = boxRef.current;
@@ -282,8 +281,8 @@ function useWaveformWheel(
         Math.abs(e.deltaX) > Math.abs(e.deltaY) && !e.metaKey && !e.ctrlKey;
 
       if (sideways) {
-        // Nothing to pan to at zoom 0: the whole track is already on screen.
-        if (store.zoom === 0) return;
+        // Nothing to pan to when the whole track is already on screen.
+        if (isZoomedOut(store.zoom)) return;
         e.preventDefault();
         store.setViewCentre(
           (win.startS + win.endS) / 2 + (e.deltaX / rect.width) * span,
@@ -293,32 +292,22 @@ function useWaveformWheel(
 
       e.preventDefault();
 
-      // Each step doubles the magnification, so one step per wheel event is
-      // far too much: a trackpad sends dozens of events per swipe and the
-      // view went from the whole track to two seconds before the fingers
-      // lifted. Delta is banked until it is worth a step. The threshold is
-      // about one notch of a mouse wheel, so a mouse still steps per notch
-      // while a trackpad takes a deliberate swipe.
-      //
-      // Reversing direction spends the bank rather than fighting it, so a
-      // correction responds immediately instead of having to pay off what
-      // was accumulated the other way.
-      if (banked.current !== 0 && Math.sign(e.deltaY) !== Math.sign(banked.current)) {
-        banked.current = 0;
-      }
-      banked.current += e.deltaY;
-      if (Math.abs(banked.current) < ZOOM_STEP_DELTA) return;
-      const direction = banked.current < 0 ? 1 : -1;
-      banked.current = 0;
-
-      const next = Math.max(0, Math.min(MAX_ZOOM, store.zoom + direction));
+      // Continuous. Every event moves the zoom by its own share of a
+      // doubling, so the view scales with the gesture instead of snapping
+      // between sizes — which is what a whole step per event looked like,
+      // each one being a 2x jump.
+      const next = Math.max(
+        0,
+        Math.min(MAX_ZOOM, store.zoom - e.deltaY / ZOOM_DELTA_PER_DOUBLING),
+      );
       if (next === store.zoom) return;
+
       const anchorS = win.startS + frac * span;
       store.setZoom(next);
-      // Zoom 0 is the whole track, so there is nothing left to pan and the
-      // centre goes back to following the playhead.
+      // Fully zoomed out the whole track is on screen, so there is nothing
+      // left to pan and the centre goes back to following the playhead.
       store.setViewCentre(
-        next === 0 ? null : anchorS + (0.5 - frac) * waveSpan(total, next),
+        isZoomedOut(next) ? null : anchorS + (0.5 - frac) * waveSpan(total, next),
       );
     };
 

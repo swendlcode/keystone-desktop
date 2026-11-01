@@ -28,7 +28,16 @@ interface PlayerStore {
   pendingStartAt: number;
   /** Bumped by `stop()` only. Compared against a ref in `usePlayer`. */
   stopSeq: number;
-  /** Zoom index into `Waveform.levels`. The player's - / + buttons. */
+  /**
+   * Magnification as a power of two: span = duration / 2**zoom.
+   *
+   * Continuous, not an integer index. Each whole step doubles, so stepping
+   * by one per wheel event is a 2x jump — which is what made zooming feel
+   * like it was snapping between sizes rather than scaling. A fraction of a
+   * step is a fraction of a doubling, and nothing downstream cares: the span
+   * is a power, `pickLevel` picks from the span, and the peaks pyramid is
+   * chosen per frame anyway.
+   */
   zoom: number;
   /**
    * Centre of the visible waveform window, in seconds, or null to follow the
@@ -190,12 +199,20 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     set({ volume: clamped });
   },
   setZoom: (zoom) => set({ zoom: Math.max(0, Math.min(MAX_ZOOM, zoom)) }),
-  // The buttons re-centre on the playhead. Only a scroll pans, and a user who
-  // reaches for the toolbar after scrolling away has asked to be brought back.
+  // The buttons move to the next whole doubling rather than adding one to a
+  // fraction, so clicking + from 2.4x lands on 4x and not 4.8x. They also
+  // re-centre on the playhead: a user who reaches for the toolbar after
+  // scrolling away has asked to be brought back.
   zoomIn: () =>
-    set((s) => ({ zoom: Math.min(MAX_ZOOM, s.zoom + 1), viewCentreS: null })),
+    set((s) => ({
+      zoom: Math.min(MAX_ZOOM, Math.floor(s.zoom + 1e-6) + 1),
+      viewCentreS: null,
+    })),
   zoomOut: () =>
-    set((s) => ({ zoom: Math.max(0, s.zoom - 1), viewCentreS: null })),
+    set((s) => ({
+      zoom: Math.max(0, Math.ceil(s.zoom - 1e-6) - 1),
+      viewCentreS: null,
+    })),
   setViewCentre: (viewCentreS) => set({ viewCentreS }),
   setDraggingCueSlot: (draggingCueSlot) => set({ draggingCueSlot }),
   setLoadError: (loadError) => set({ loadError }),
@@ -227,6 +244,15 @@ export function forgetTracks(ids: readonly string[]): void {
 
   setPlaylist(playlist.filter((t) => !gone.has(t.id)));
   if (currentTrack && gone.has(currentTrack.id)) clearCurrent();
+}
+
+/** True when the whole track is on screen and there is nothing to pan. */
+export function isZoomedOut(zoom: number): boolean {
+  return zoom <= 1e-6;
+}
+
+export function isMaxZoom(zoom: number): boolean {
+  return zoom >= MAX_ZOOM - 1e-6;
 }
 
 export { MAX_ZOOM };

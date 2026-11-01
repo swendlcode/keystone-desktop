@@ -55,7 +55,10 @@ export function VirtualPiano({ keyRoot, keyMode, notation }: VirtualPianoProps) 
   return (
     <div className="flex items-center gap-3 px-1 pb-1 pt-2">
       <span className="mono shrink-0 text-xs text-keystone-lime">{name}</span>
-      <div className="relative h-14 min-w-0 flex-1 select-none">
+      {/* The keyboard sits on its own dark bed so the white keys read as
+          keys in the light theme too, where the panel behind them is also
+          near-white. */}
+      <div className="relative h-14 min-w-0 flex-1 select-none overflow-hidden rounded-md bg-[#0e0f10] p-px">
         <div className="flex h-full w-full gap-px">
           {Array.from({ length: whiteCount }, (_, i) => {
             const pc = WHITE[i % WHITE.length];
@@ -111,9 +114,15 @@ function Key({
   inScale: boolean;
   white: boolean;
 }) {
+  // Literal colours, not theme tokens. `gray-200` and `gray-900` INVERT
+  // between themes — that is what they are for — so in the light theme the
+  // white keys turned near-black and the black keys turned white, which is
+  // a piano with its colours swapped. A keyboard is a physical object like
+  // the Camelot swatches: it looks the same in both themes or it stops
+  // being recognisable.
   const base = white
-    ? 'bg-gray-200 text-gray-600'
-    : 'bg-gray-900 text-gray-400 ring-1 ring-black/60';
+    ? 'bg-[#eceeec] text-[#55584f]'
+    : 'bg-[#17181a] text-[#9a9d98]';
   const lit = tonic
     ? 'bg-keystone-lime text-[color:var(--color-on-accent)]'
     : inScale
@@ -124,7 +133,9 @@ function Key({
 
   return (
     <span
-      className={`flex h-full w-full items-end justify-center rounded-b-sm pb-1 text-[10px] ${lit}`}
+      className={`flex h-full w-full items-end justify-center rounded-b-sm pb-1 text-[10px] font-medium ${
+        white ? '' : 'shadow-[0_1px_3px_rgb(0_0_0/0.5)]'
+      } ${lit}`}
     >
       {white && pitchName}
     </span>
