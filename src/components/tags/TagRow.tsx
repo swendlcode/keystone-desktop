@@ -2,7 +2,7 @@ import { KeyResult } from '../library/KeyResult';
 import { setTrackDrag } from '../collections/dragTypes';
 import { CoverArtThumb } from './CoverArtThumb';
 import { TagCell } from './TagCell';
-import { useWriteField } from './useTagEditing';
+import { useFieldWriteCount, useWriteField } from './useTagEditing';
 import { useEffectiveSettings } from '../../hooks/useSettings';
 import { useLibraryStore } from '../../stores/libraryStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -36,6 +36,7 @@ export function TagRow({
 }) {
   const settings = useEffectiveSettings();
   const writeField = useWriteField();
+  const writeCount = useFieldWriteCount(track.id);
   const selectedIds = useLibraryStore((s) => s.selectedIds);
   const select = useLibraryStore((s) => s.select);
   const openContextMenu = useUiStore((s) => s.openContextMenu);
@@ -62,9 +63,21 @@ export function TagRow({
       }}
     >
       <CoverArtThumb trackId={track.id} />
-      <TagCell value={track.album} onCommit={(v) => writeField(track.id, 'album', v)} />
-      <TagCell value={track.artist} onCommit={(v) => writeField(track.id, 'artist', v)} />
-      <TagCell value={track.title} onCommit={(v) => writeField(track.id, 'title', v)} />
+      <TagCell
+        value={track.album}
+        writeCount={writeCount}
+        onCommit={(v) => writeField(track.id, 'album', v)}
+      />
+      <TagCell
+        value={track.artist}
+        writeCount={writeCount}
+        onCommit={(v) => writeField(track.id, 'artist', v)}
+      />
+      <TagCell
+        value={track.title}
+        writeCount={writeCount}
+        onCommit={(v) => writeField(track.id, 'title', v)}
+      />
       <span className="mono tnum px-1.5 text-xs text-gray-400">
         {formatTempo(track.tempoDisplay, settings?.tempoDecimals ?? 0, track.tempoResidualMs)}
       </span>
@@ -76,7 +89,11 @@ export function TagRow({
         />
       </span>
       <span className="mono tnum px-1.5 text-xs text-gray-400">{track.energy ?? ''}</span>
-      <TagCell value={track.genre} onCommit={(v) => writeField(track.id, 'genre', v)} />
+      <TagCell
+        value={track.genre}
+        writeCount={writeCount}
+        onCommit={(v) => writeField(track.id, 'genre', v)}
+      />
     </div>
   );
 }
