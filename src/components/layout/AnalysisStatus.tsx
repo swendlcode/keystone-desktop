@@ -97,9 +97,9 @@ export function AnalysisStatus() {
           className="flex h-5 w-5 items-center justify-center rounded text-gray-400 hover:bg-gray-800 hover:text-keystone-white"
         >
           {running ? (
-            <Pause size={11} color="currentColor" variant="Bold" />
+            <Pause size={11} color="currentColor" variant="Linear" />
           ) : (
-            <Play size={11} color="currentColor" variant="Bold" />
+            <Play size={11} color="currentColor" variant="Linear" />
           )}
         </button>
       </Tooltip>

@@ -86,7 +86,7 @@ export function CueRegions({
         style={{ left: `${centre * 100}%` }}
         className="absolute top-1/2 z-20 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-gray-900/85 text-keystone-white shadow-lg ring-1 ring-gray-600 transition-colors hover:bg-keystone-lime hover:text-[color:var(--color-on-accent)]"
       >
-        <Play size={13} color="currentColor" variant="Bold" />
+        <Play size={13} color="currentColor" variant="Linear" />
       </button>
     </>
   );

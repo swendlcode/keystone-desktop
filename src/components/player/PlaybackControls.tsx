@@ -13,11 +13,11 @@ import { formatTime } from '../../utils/formatters';
 /**
  * Transport: previous, play/pause, next — beside the waveform, not above it.
  *
- * The play button is a filled accent disc. An earlier pass made it flat on
- * the grounds that a filled disc was the loudest thing on screen for the
- * control pressed least — which was wrong about which control that is. It is
- * the one control every other app in this category draws as a disc, and flat
- * and icon-only it read as a decoration rather than a button.
+ * The play button is a filled accent disc with an OUTLINE glyph on it. Every
+ * icon in Keystone is `variant="Linear"`; a Bold glyph here was a second
+ * icon style in an app that has one, and the solid triangle on a solid disc
+ * read as a single blob rather than as a mark on a button. The disc carries
+ * the emphasis, the glyph carries the meaning.
  *
  * It calls `pause()` / `resume()` and never `stop()`. They land on the same
  * `isPlaying: false`, but stop rewinds, and a play button that rewinds is how
@@ -35,7 +35,7 @@ export function PlaybackControls() {
   return (
     <div className="flex shrink-0 items-center gap-1.5">
       <IconButton label="Previous" onClick={playPrev} disabled={!hasTrack}>
-        <Previous size={14} color="currentColor" variant="Bold" />
+        <Previous size={14} color="currentColor" variant="Linear" />
       </IconButton>
 
       <button
@@ -46,16 +46,16 @@ export function PlaybackControls() {
         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-keystone-lime text-[color:var(--color-on-accent)] shadow-lg shadow-keystone-lime/20 transition-colors hover:bg-[color:var(--color-accent-hover)] disabled:bg-gray-700 disabled:text-gray-500 disabled:shadow-none"
       >
         {isPlaying ? (
-          <Pause size={18} color="currentColor" variant="Bold" />
+          <Pause size={18} color="currentColor" variant="Linear" />
         ) : (
           // Nudged right by a pixel: a triangle's visual centre is left of
           // its bounding box, so centring the box leaves it looking off.
-          <Play size={18} color="currentColor" variant="Bold" className="ml-0.5" />
+          <Play size={18} color="currentColor" variant="Linear" className="ml-0.5" />
         )}
       </button>
 
       <IconButton label="Next" onClick={playNext} disabled={!hasTrack}>
-        <Next size={14} color="currentColor" variant="Bold" />
+        <Next size={14} color="currentColor" variant="Linear" />
       </IconButton>
     </div>
   );
