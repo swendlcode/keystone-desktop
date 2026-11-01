@@ -31,6 +31,16 @@ export function useRowInteraction(window: TrackWindow, autoPlay: boolean) {
 
   const onRowMouseDown = useCallback(
     (e: React.MouseEvent, index: number) => {
+      // Left button only.
+      //
+      // `mousedown` fires before `contextmenu`, so without this a right-click
+      // ran the selection logic first and collapsed a selection of four
+      // hundred rows down to the one under the pointer — by the time the menu
+      // opened, the row was already the whole selection and the menu's own
+      // "leave an existing selection alone" check had nothing left to
+      // protect. With auto-play on it also started the track.
+      if (e.button !== 0) return;
+
       const track = winRef.current.trackAt(index);
       if (!track) return;
       const store = useLibraryStore.getState();

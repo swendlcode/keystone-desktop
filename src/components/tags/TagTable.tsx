@@ -35,6 +35,11 @@ export function TagTable({ onOpen }: { onOpen: (trackId: string) => void }) {
 
   const onRowMouseDown = useCallback(
     (e: React.MouseEvent, index: number) => {
+      // Left button only — `mousedown` precedes `contextmenu`, and without
+      // this a right-click collapsed the selection before the menu could see
+      // it. Same bug as the library table.
+      if (e.button !== 0) return;
+
       const track = tracksRef.current[index];
       if (!track) return;
       const store = useLibraryStore.getState();
