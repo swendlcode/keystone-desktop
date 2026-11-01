@@ -44,6 +44,15 @@ export function usePlayer() {
     el.preload = 'metadata';
     audioRef.current = el;
 
+    // A fresh element holds nothing, and the refs saying what is loaded
+    // outlive it — they belong to the component, not to the element. Left
+    // stale, the transport effect believes the new element already has this
+    // track's source and calls play() on an empty one, which rejects with
+    // AbortError and puts a failure on screen that describes nothing the
+    // user did.
+    loadedIdRef.current = null;
+    readyIdRef.current = null;
+
     const onTime = () => setCurrentTime(el.currentTime);
     const onMeta = () => setDuration(el.duration || 0);
     const onEnded = () => playNext();
@@ -263,6 +272,11 @@ async function fetchAsBlobUrl(url: string): Promise<string> {
  * message is the only thing that tells them apart.
  */
 async function beginPlayback(el: HTMLAudioElement): Promise<void> {
+  // Nothing to start. The load path calls back here once a source lands, so
+  // returning quietly is correct — and reporting "playback failed" for an
+  // element that was never given a file would be a lie about the file.
+  if (!el.src) return;
+
   try {
     await el.play();
     usePlayerStore.getState().setLoadError(null);
