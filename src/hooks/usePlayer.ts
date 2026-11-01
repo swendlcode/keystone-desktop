@@ -201,14 +201,45 @@ async function beginPlayback(el: HTMLAudioElement): Promise<void> {
     usePlayerStore.getState().setLoadError(null);
   } catch (e) {
     const err = e as { name?: string; message?: string };
+    const store = usePlayerStore.getState();
+    store.pause();
+
+    if (err.name === 'NotAllowedError') {
+      store.setLoadError('The webview blocked playback. Press play again.');
+      return;
+    }
+
+    // `NotSupportedError` is the ambiguous one: WebKit raises it both for a
+    // codec it will not decode and for a source it could not fetch at all.
+    // Rather than ask the user to read a console, probe the URL — a status
+    // code means the asset protocol is serving the bytes and the codec is at
+    // fault, and a throw means the protocol never delivered them.
+    store.setLoadError(
+      `Playback failed: ${err.name ?? ''} ${err.message ?? String(e)} — ${srcHint(el)}`.trim(),
+    );
+    const reach = await probeSource(el.src);
     usePlayerStore
       .getState()
       .setLoadError(
-        err.name === 'NotAllowedError'
-          ? 'The webview blocked playback. Press play again.'
-          : `Playback failed: ${err.name ?? ''} ${err.message ?? String(e)}`.trim(),
+        `${err.name ?? 'Playback failed'} · ${srcHint(el)} · ${reach}`,
       );
-    usePlayerStore.getState().pause();
+  }
+}
+
+/**
+ * Can the webview fetch the source at all?
+ *
+ * One range request for two bytes. The answer separates the two causes of
+ * `NotSupportedError` without a second round trip through the user.
+ */
+async function probeSource(src: string): Promise<string> {
+  if (!src) return 'no source';
+  try {
+    const res = await fetch(src, { headers: { Range: 'bytes=0-1' } });
+    const type = res.headers.get('content-type') ?? 'no content-type';
+    return `fetch ${res.status} ${type}`;
+  } catch (e) {
+    return `fetch threw: ${(e as Error)?.message ?? String(e)}`;
   }
 }
 
@@ -230,8 +261,9 @@ function srcHint(el: HTMLAudioElement): string {
     /* leave it encoded; it is a hint either way */
   }
   const ext = decoded.split('.').pop()?.split(/[?#]/)[0] ?? '';
-  const tail = decoded.length > 90 ? `…${decoded.slice(-90)}` : decoded;
-  return `.${ext} · ${tail}`;
+  const scheme = decoded.slice(0, decoded.indexOf('/', decoded.indexOf('//') + 2));
+  const tail = decoded.length > 60 ? `…${decoded.slice(-60)}` : decoded;
+  return `.${ext} · ${scheme || '?'} · ${tail}`;
 }
 
 /** A MediaError code as something a person can act on. */

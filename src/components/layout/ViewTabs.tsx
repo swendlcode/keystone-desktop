@@ -15,32 +15,41 @@ const TABS: Array<{ id: ActiveView; label: string }> = [
  * and left the main column with no header of its own while the sidebar had a
  * title for every section in it.
  *
- * Drawn as one segmented control rather than two loose pills. Two rounded
- * buttons with a gap between them read as two independent toggles, either of
- * which might be on; a single bordered track with one solid segment reads as
- * what it is — two states of one thing, exactly one of them current.
+ * Underlined text, with nothing boxed. Pills read as two independent
+ * toggles, and a filled segmented control put a block of accent at the top
+ * of the column competing with the waveform directly beneath it. The
+ * underline sits ON the border this bar shares with the content below, so
+ * the mark and the edge are the same line — which is what makes it read as
+ * "this tab owns what is under it" rather than as another button.
+ *
+ * The accent is spent on the 2px rule alone. Everything else is weight and
+ * colour of text.
  */
 export function ViewTabs() {
   const view = useUiStore((s) => s.view);
   const setView = useUiStore((s) => s.setView);
 
   return (
-    <nav className="flex h-10 shrink-0 items-center border-b border-gray-700 bg-gray-900 px-3">
-      <div
-        role="tablist"
-        className="inline-flex items-center gap-0.5 rounded-md border border-gray-700 bg-gray-800 p-0.5"
-      >
-        {TABS.map((tab) => (
+    <nav
+      role="tablist"
+      className="flex h-10 shrink-0 items-end gap-5 border-b border-gray-700 bg-gray-900 px-3"
+    >
+      {TABS.map((tab) => {
+        const active = view === tab.id;
+        return (
           <button
             key={tab.id}
             type="button"
             role="tab"
-            aria-selected={view === tab.id}
+            aria-selected={active}
             onClick={() => setView(tab.id)}
-            className={`flex h-7 items-center gap-1.5 rounded px-4 text-xs font-semibold transition-colors ${
-              view === tab.id
-                ? 'bg-keystone-lime text-[color:var(--color-on-accent)]'
-                : 'text-gray-400 hover:bg-gray-700 hover:text-keystone-white'
+            // -mb-px pulls the underline down onto the nav's own bottom
+            // border so the two occupy the same pixel row, rather than the
+            // rule floating a pixel above the edge.
+            className={`-mb-px flex h-9 items-center gap-1.5 border-b-2 px-0.5 text-xs font-semibold transition-colors ${
+              active
+                ? 'border-keystone-lime text-keystone-white'
+                : 'border-transparent text-gray-400 hover:text-keystone-white'
             }`}
           >
             {tab.id === 'tags' && (
@@ -48,8 +57,8 @@ export function ViewTabs() {
             )}
             {tab.label}
           </button>
-        ))}
-      </div>
+        );
+      })}
     </nav>
   );
 }

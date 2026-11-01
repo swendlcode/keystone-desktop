@@ -21,10 +21,17 @@ use crate::state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // `tauri=warn` matters more than it looks. Tauri reports its own
+    // failures through the `log` crate — the asset protocol's "not
+    // configured to allow the path", "File does not exist at path" and
+    // "Missing OS permission" among them — and a filter naming only this
+    // crate threw all of them away before they reached the terminal. An
+    // audio file that would not play was therefore silent on both sides:
+    // nothing in the webview console, nothing in the dev log.
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "keystone_lib=info".into()),
+                .unwrap_or_else(|_| "keystone_lib=info,tauri=warn,wry=warn".into()),
         )
         .init();
 
