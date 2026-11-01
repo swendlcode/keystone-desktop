@@ -12,10 +12,6 @@ with what.
 
 Free, open source, and entirely offline. No account, nothing uploaded.
 
-<!-- Screenshot placeholder — drop a capture of the main window (wheel, library, player)
-     at docs/screenshot.png before publishing. -->
-![Keystone](docs/screenshot.png)
-
 ## What it does
 
 - **Camelot wheel.** Click a key and the library narrows to it plus everything
