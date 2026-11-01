@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
 import { Keyboard } from '../ui/icons';
 import { CueStepper } from './CueStepper';
+import { EnergyPicker } from './EnergyPicker';
 import { KeyPicker } from './KeyPicker';
-import { EnergyValue, TempoValue } from '../library/TrackValues';
+import { TempoValue } from '../library/TrackValues';
 import { useUiStore } from '../../stores/uiStore';
 import type { Settings, Track } from '../../types';
 
@@ -35,7 +36,7 @@ export function TrackReadout({ track, settings, onSeek }: TrackReadoutProps) {
       </Readout>
 
       <Readout label="Energy">
-        <EnergyValue track={track} />
+        <EnergyPicker track={track} />
       </Readout>
 
       <Readout label="BPM">

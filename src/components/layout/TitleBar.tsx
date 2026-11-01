@@ -46,11 +46,12 @@ export function TitleBar() {
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
 
   return (
-    // pl-[76px] clears the macOS traffic lights, which the Overlay title bar
-    // draws at x:16 over whatever is beneath them. The mark used to sit here
-    // and was rendered underneath the close button; it lives in the StatusBar
-    // now, where nothing is drawn over it.
-    <div className="relative flex h-12 shrink-0 items-center gap-3 border-b border-gray-700 bg-gray-900 pl-[76px] pr-3">
+    // The macOS traffic lights are drawn over the Overlay title bar from x:16
+    // and run to about x:70. 76px cleared them arithmetically and still read
+    // as crowded — the first tab sat four pixels off the zoom button with no
+    // gutter between two unrelated groups of controls. 100px gives the tabs a
+    // margin of their own rather than the minimum that avoids a collision.
+    <div className="relative flex h-12 shrink-0 items-center gap-3 border-b border-gray-700 bg-gray-900 pl-[100px] pr-3">
       <div
         data-tauri-drag-region
         onMouseDown={startDrag}

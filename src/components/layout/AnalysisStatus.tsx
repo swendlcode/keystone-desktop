@@ -50,7 +50,7 @@ export function AnalysisStatus() {
   if (empty) {
     if (!showDone || !lastRun) return null;
     return (
-      <span className="mono flex items-center gap-1.5 text-[11px] text-gray-500">
+      <span className="mono flex items-center gap-1.5 whitespace-nowrap text-[11px] text-gray-500">
         <Cpu size={12} color="currentColor" variant="Linear" />
         Analysed {formatCount(lastRun.analyzed)}
         {lastRun.fromCache > 0 && ` · ${formatCount(lastRun.fromCache)} cached`}
@@ -68,20 +68,23 @@ export function AnalysisStatus() {
 
   return (
     <span className="flex items-center gap-2">
-      <span className="label flex items-center gap-1.5">
+      <span className="label flex shrink-0 items-center gap-1.5 whitespace-nowrap">
         <Cpu size={12} color="currentColor" variant="Linear" />
         Analysing
       </span>
 
       {/* A fixed width, because a bar sized by its own label is a bar that
           twitches on every completed track. */}
-      <ProgressBar value={queueFraction(progress)} className="w-28" />
+      <ProgressBar value={queueFraction(progress)} className="w-28 shrink-0" />
 
-      <span className="mono tnum text-[11px] text-gray-400">
+      {/* whitespace-nowrap: the status bar is 32px tall and the slash is a
+          break opportunity, so `0 / 50` wrapped into two stacked lines that
+          overflowed the bar. */}
+      <span className="mono tnum shrink-0 whitespace-nowrap text-[11px] text-gray-400">
         {formatCount(progress?.done ?? 0)} / {formatCount(progress?.total ?? 0)}
       </span>
       {(progress?.failed ?? 0) > 0 && (
-        <span className="mono tnum text-[11px] text-amber-400">
+        <span className="mono tnum shrink-0 whitespace-nowrap text-[11px] text-amber-400">
           {formatCount(progress!.failed)} failed
         </span>
       )}

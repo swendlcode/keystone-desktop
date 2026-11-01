@@ -70,20 +70,21 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Back the canvas at device resolution and keep drawing in CSS pixels.
-    // Without this the 1px columns land between device pixels and the whole
-    // waveform reads as a grey smear on a retina display.
+    // Back the canvas at device resolution and draw in device pixels too.
+    // Scaling the context by the ratio and then looping once per CSS pixel —
+    // which is what this did — paints every column two device pixels wide and
+    // throws away exactly the resolution the larger backing store bought.
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.round(size.width * dpr);
     canvas.height = Math.round(size.height * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     drawWaveform(ctx, {
       wave,
       window: win,
       playheadS: currentTime,
-      width: size.width,
-      height: size.height,
+      width: canvas.width,
+      height: canvas.height,
       ...waveColors(),
     });
   }, [wave, size, win.startS, win.endS, currentTime]);

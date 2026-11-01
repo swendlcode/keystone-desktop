@@ -1,9 +1,9 @@
 import { useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Category, Keyboard, Music } from '../ui/icons';
+import { Category, Flash, Keyboard, Music } from '../ui/icons';
 import { useAddToCollection, useCollections } from '../../hooks/useCollections';
 import { cueKeys } from '../../hooks/useCues';
-import { trackKeys } from '../../hooks/useLibrary';
+import { trackKeys, useSetTrackEnergy } from '../../hooks/useLibrary';
 import { useEffectiveSettings } from '../../hooks/useSettings';
 import { useLibraryStore } from '../../stores/libraryStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -19,6 +19,9 @@ import {
 } from './trackMenuItems';
 import type { MenuItem } from '../ui/menuItem';
 import type { ExportTarget, Track } from '../../types';
+
+/** The energy scale, 1-10, as the context menu lists it. */
+const ENERGY_STEPS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 export interface ConfirmRequest {
   title: string;
@@ -43,6 +46,7 @@ export function useTrackMenu(
   const { data: targets = [] } = useExportTargets();
   const { data: collections = [] } = useCollections();
   const addToCollection = useAddToCollection();
+  const setEnergy = useSetTrackEnergy();
   const selectedIds = useLibraryStore((s) => s.selectedIds);
   const openInfo = useUiStore((s) => s.openInfo);
 
@@ -111,6 +115,25 @@ export function useTrackMenu(
             ],
       },
       {
+        // The player bar can only correct the track that is playing. Energy
+        // is the reading most likely to be argued with — the scale's
+        // ordering has never been validated against a human ear — so it has
+        // to be reachable for a row without auditioning it first.
+        id: 'set-energy',
+        label:
+          targetIds.length > 1
+            ? `Set Energy for ${targetIds.length} Tracks`
+            : 'Set Energy',
+        icon: <Flash size={12} color="currentColor" variant="Linear" />,
+        items: ENERGY_STEPS.map((n) => ({
+          id: `energy-${n}`,
+          label: track.energy === n ? `${n}  ·  current` : String(n),
+          onSelect: () => {
+            for (const id of targetIds) setEnergy.mutate({ id, energy: n });
+          },
+        })),
+      },
+      {
         id: 'columns',
         label: 'Columns',
         icon: <Category size={12} color="currentColor" variant="Linear" />,
@@ -129,6 +152,7 @@ export function useTrackMenu(
     addToCollection,
     ask,
     collections,
+    setEnergy,
     openInfo,
     qc,
     refresh,

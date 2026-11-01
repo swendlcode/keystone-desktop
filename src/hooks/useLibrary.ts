@@ -160,6 +160,27 @@ export function useSetTrackKey() {
   });
 }
 
+/**
+ * Override the measured energy by hand.
+ *
+ * Same situation the key was in: `set_track_energy` existed and nothing
+ * called it. Energy matters more than most for being correctable, because the
+ * engine's own ordering is still unproven — the scale's spread was fitted on
+ * a real corpus but whether track A should outrank track B was never
+ * validated, so the user's ear is the better authority on a disagreement.
+ */
+export function useSetTrackEnergy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, energy }: { id: string; energy: number }) =>
+      keystoneService.setTrackEnergy(id, energy),
+    onSuccess: (track) => {
+      qc.setQueryData(trackKeys.byId(track.id), track);
+      patchTrackInPages(qc, track);
+    },
+  });
+}
+
 export function useRemoveTracks() {
   const qc = useQueryClient();
   const clearSelection = useLibraryStore((s) => s.clearSelection);
