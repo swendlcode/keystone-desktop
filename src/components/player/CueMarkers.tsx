@@ -107,7 +107,12 @@ export function CueMarkers({
         const dragging = preview?.slot === cue.slot;
         // Past the right-hand edge the flag would be clipped by the
         // waveform's own overflow, so it folds to the other side of its line.
-        const flagLeft = frac > 0.86;
+        //
+        // The threshold is a long way out (0.94 rather than 0.86) because
+        // every flip is a visible jump, and while panning a flag sitting
+        // near the boundary flipped back and forth on consecutive frames.
+        // Better to fold late and clip a few pixels than to flicker.
+        const flagLeft = frac > 0.94;
 
         return (
           <button

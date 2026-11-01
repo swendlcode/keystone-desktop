@@ -43,8 +43,8 @@ export function Sidebar() {
           is why it moved to the status bar earlier. The sidebar's top is the
           one place in this window with nothing drawn over it and a natural
           left edge to sit against. */}
-      <div className="flex items-center gap-2 px-3 pb-1 pt-3">
-        <Logo size={16} />
+      <div className="flex items-center justify-center px-3 pb-2 pt-4">
+        <Logo size={26} />
       </div>
 
       <CamelotWheelSlot />

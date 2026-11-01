@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Category, Flash, Keyboard, Music } from '../ui/icons';
+import { Category, CloseCircle, Flash, Keyboard, Music } from '../ui/icons';
 import { useAddToCollection, useCollections } from '../../hooks/useCollections';
 import { cueKeys } from '../../hooks/useCues';
 import { trackKeys, useSetTrackEnergy } from '../../hooks/useLibrary';
@@ -63,8 +63,16 @@ export function useTrackMenu(
       return Boolean(settings[TARGET_FLAG[t]]) && info?.supported && info.installed;
     });
 
+    // A right-click inside the selection acts on the whole selection; outside
+    // it, on that row alone. The row handlers already select an unselected
+    // row before opening the menu, so by the time this runs the two cases
+    // have converged — but reading the set rather than assuming it keeps the
+    // menu honest if a caller ever opens it some other way.
+    const targetIds = selectedIds.has(track.id) ? [...selectedIds] : [track.id];
+
     const ctx: MenuContext = {
       track,
+      targetIds,
       settings,
       liveTargets,
       refresh: () => void refresh(),
@@ -72,14 +80,27 @@ export function useTrackMenu(
       openInfo: () => openInfo(track.id),
       ask,
     };
-
-    // A right-click inside the selection acts on the whole selection; outside
-    // it, on that row alone. The row handlers already select an unselected
-    // row before opening the menu, so by the time this runs the two cases
-    // have converged — but reading the set rather than assuming it keeps the
-    // menu honest if a caller ever opens it some other way.
-    const targetIds = selectedIds.has(track.id) ? [...selectedIds] : [track.id];
     const fileable = collections.filter((c) => c.kind !== 'smart');
+
+    /**
+     * A way out of a large selection, from the selection itself.
+     *
+     * Escape clears it and the toolbar chip clears it, but neither is where
+     * the hand is after a shift-click across four hundred rows — and a click
+     * on a single row to deselect is also a click that can start playback,
+     * so it is not a safe way to back out.
+     */
+    const clearSelection: MenuItem[] =
+      targetIds.length > 1
+        ? [
+            {
+              id: 'clear-selection',
+              label: `Clear Selection (${targetIds.length})`,
+              icon: <CloseCircle size={12} color="currentColor" variant="Linear" />,
+              onSelect: () => useLibraryStore.getState().clearSelection(),
+            },
+          ]
+        : [];
 
     return [
       ...fileItems(ctx),
@@ -146,6 +167,7 @@ export function useTrackMenu(
         icon: <Keyboard size={12} color="currentColor" variant="Linear" />,
         items: keySystemSubmenu(settings, write),
       },
+      ...clearSelection,
       removeItem(ctx),
     ];
   }, [

@@ -18,6 +18,8 @@ import type { ConfirmRequest } from './useTrackMenu';
 /** Shared by every builder below: what the menu needs to do its work. */
 export interface MenuContext {
   track: Track;
+  /** The selection this menu acts on — the clicked row alone if it is not in one. */
+  targetIds: string[];
   settings: Settings;
   /** Export targets that are enabled, supported and actually installed. */
   liveTargets: ExportTarget[];
@@ -146,19 +148,34 @@ export function cueItems({ track, liveTargets, ask, refreshCues }: MenuContext):
   ];
 }
 
-export function removeItem({ track, refresh, ask }: MenuContext): MenuItem {
+/**
+ * Remove, acting on the whole selection.
+ *
+ * It used to pass `[track.id]` regardless, so selecting four hundred rows and
+ * choosing Remove took one of them away and left the other 399 — with a
+ * dialog that had just named a single file, so nothing looked wrong until
+ * the list came back almost unchanged.
+ */
+export function removeItem({ track, targetIds, refresh, ask }: MenuContext): MenuItem {
+  const many = targetIds.length > 1;
   return {
     id: 'remove',
-    label: 'Remove Song from Library...',
+    label: many
+      ? `Remove ${targetIds.length} Songs from Library...`
+      : 'Remove Song from Library...',
     icon: <Trash size={12} color="currentColor" variant="Linear" />,
     separatorBefore: true,
     danger: true,
     onSelect: () =>
       ask({
-        title: `Remove ${track.filename}?`,
-        body: 'It leaves Keystone. The file on disk is untouched.',
+        title: many
+          ? `Remove ${targetIds.length} tracks?`
+          : `Remove ${track.filename}?`,
+        body: many
+          ? 'They leave Keystone. The files on disk are untouched.'
+          : 'It leaves Keystone. The file on disk is untouched.',
         confirmLabel: 'Remove',
-        run: () => void keystoneService.removeTracks([track.id]).then(refresh),
+        run: () => void keystoneService.removeTracks(targetIds).then(refresh),
       }),
   };
 }

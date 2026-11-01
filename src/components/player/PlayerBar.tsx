@@ -35,7 +35,12 @@ export function PlayerBar() {
   const totalS = duration || (track?.durationMs ?? 0) / 1000;
 
   return (
-    <div className="flex shrink-0 flex-col gap-2 border-b border-gray-700 bg-gray-900 px-3 py-2.5">
+    // `relative`: the playback error is an overlay rather than a row. As a
+    // row it changed the bar's height when it appeared, which shoved the
+    // whole table down a line at the exact moment something had already gone
+    // wrong.
+    <div className="relative flex shrink-0 flex-col gap-2 border-b border-gray-700 bg-gray-900 px-3 py-2.5">
+      <PlaybackError />
       <div className="flex items-center gap-3">
         <PlaybackControls />
 
@@ -56,11 +61,8 @@ export function PlayerBar() {
           The title is the one thing here that cannot be guessed from a
           fragment. */}
       <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2">
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-xs font-semibold uppercase tracking-wide text-keystone-white">
-            {track ? trackLabel(track) : 'No track'}
-          </span>
-          <PlaybackError />
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wide text-keystone-white">
+          {track ? trackLabel(track) : 'No track'}
         </span>
         {track && (
           <TrackReadout track={track} settings={settings} onSeek={seek} />

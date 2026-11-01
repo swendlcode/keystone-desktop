@@ -46,15 +46,21 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
 
   useWaveformWheel(boxRef, durationS);
 
-  // A manual pan holds until it stops being useful. Once playback has run out
-  // of the window the user scrolled to, following the playhead is what they
-  // want again — and the alternative, a view that never comes back on its own,
-  // looks like the waveform has frozen.
+  // Re-attach to the playhead once playback has left the window the user
+  // panned to — but NOT while the pointer is over the waveform.
+  //
+  // Without that second condition this fought every zoom. Cmd-scrolling in on
+  // a section away from the playhead puts the playhead outside the window by
+  // definition, so this effect fired on the same frame and yanked the view
+  // back to the playhead: the zoom appeared to land somewhere other than
+  // under the cursor, at random, depending on where playback happened to be.
+  // A pointer over the strip means the user is working with it, and the view
+  // is theirs until they look away.
   useEffect(() => {
-    if (viewCentreS == null) return;
+    if (viewCentreS == null || hoverFrac != null) return;
     if (currentTime >= win.startS && currentTime <= win.endS) return;
     usePlayerStore.getState().setViewCentre(null);
-  }, [currentTime, viewCentreS, win.startS, win.endS]);
+  }, [currentTime, viewCentreS, hoverFrac, win.startS, win.endS]);
 
   useLayoutEffect(() => {
     const box = boxRef.current;
@@ -110,6 +116,21 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
     return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
   };
 
+  /**
+   * Only re-render when the pointer has actually moved somewhere different.
+   *
+   * `pointermove` fires far faster than the screen refreshes, and each one
+   * was a render of the markers, the regions and a canvas repaint — which is
+   * what made dragging across the strip feel like it was stuttering rather
+   * than tracking.
+   */
+  const trackHover = (clientX: number) => {
+    const next = fracFromClientX(clientX);
+    setHoverFrac((prev) =>
+      prev != null && next != null && Math.abs(prev - next) < 0.002 ? prev : next,
+    );
+  };
+
   const openMenu = (e: React.MouseEvent, cue: (typeof cues)[number] | null) => {
     e.preventDefault();
     e.stopPropagation();
@@ -135,7 +156,7 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
       ref={boxRef}
       style={{ height: HEIGHT }}
       onPointerDown={(e) => e.button === 0 && seekFromClientX(e.clientX)}
-      onPointerMove={(e) => setHoverFrac(fracFromClientX(e.clientX))}
+      onPointerMove={(e) => trackHover(e.clientX)}
       onPointerLeave={() => setHoverFrac(null)}
       onContextMenu={(e) => openMenu(e, null)}
       // No `title` here. A native tooltip on the strip itself pops up in the

@@ -7,6 +7,7 @@ import { StatusBar } from './components/layout/StatusBar';
 import { DropOverlay } from './components/layout/DropOverlay';
 import { PlayerBar } from './components/player/PlayerBar';
 import { TrackContextMenu } from './components/menu/TrackContextMenu';
+import { RemoveSelectedShortcut } from './components/library/RemoveSelectedShortcut';
 import { useUiStore } from './stores/uiStore';
 import { useLibrarySync } from './hooks/useLibrary';
 import { useAnalysisSync } from './hooks/useAnalysis';
@@ -53,6 +54,9 @@ export default function App() {
           both the library and the tag table write to. Mounted here rather than
           per table so a right-click cannot leave two open. */}
       <TrackContextMenu />
+      {/* Backspace / Delete on the selection. Mounted here so one listener
+          and one confirmation serve both tables. */}
+      <RemoveSelectedShortcut />
     </div>
   );
 }
