@@ -19,9 +19,17 @@ export function PlaybackError() {
   if (!error) return null;
 
   return (
-    <span className="pointer-events-none absolute bottom-1 left-1 z-40 flex max-w-[70%] items-center gap-1.5 rounded bg-gray-900/90 px-2 py-1 text-[11px] text-amber-400">
-      <Warning2 size={12} color="currentColor" variant="Linear" className="shrink-0" />
-      <span className="truncate" title={error}>
+    <span className="pointer-events-none absolute bottom-1 left-1 right-1 z-40 flex items-start gap-1.5 rounded bg-gray-900/92 px-2 py-1 text-[11px] leading-snug text-amber-400">
+      <Warning2
+        size={12}
+        color="currentColor"
+        variant="Linear"
+        className="mt-px shrink-0"
+      />
+      {/* Wraps to two lines rather than truncating. The tail of this string
+          is the diagnostic — the probe result — so cutting it off removes
+          the only part worth reading. */}
+      <span className="line-clamp-2 break-all" title={error}>
         {error}
       </span>
     </span>

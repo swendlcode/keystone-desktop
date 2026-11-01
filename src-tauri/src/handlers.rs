@@ -28,6 +28,7 @@ macro_rules! keystone_invoke_handler {
             $crate::commands::import_commands::get_music_library,
             $crate::commands::import_commands::import_music_playlists,
             $crate::commands::import_commands::import_playlist_file,
+            $crate::commands::import_commands::log_client,
             // tracks
             $crate::commands::track_commands::search_tracks,
             $crate::commands::track_commands::get_track,

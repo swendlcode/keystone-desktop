@@ -223,6 +223,15 @@ async function beginPlayback(el: HTMLAudioElement): Promise<void> {
       .setLoadError(
         `${err.name ?? 'Playback failed'} · ${srcHint(el)} · ${reach}`,
       );
+    // The whole string, untruncated, into the log that already has the Rust
+    // half of this story.
+    void keystoneService
+      .logClient(
+        `playback failed: ${err.name} ${err.message} | src=${el.src} | ${reach} | ` +
+          `readyState=${el.readyState} networkState=${el.networkState} ` +
+          `mediaError=${el.error?.code ?? 'none'} canPlayMp3=${el.canPlayType('audio/mpeg') || 'no'}`,
+      )
+      .catch(() => {});
   }
 }
 

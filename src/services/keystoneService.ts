@@ -107,6 +107,11 @@ export const keystoneService = {
     return invoke('import_playlist_file', { path });
   },
 
+  /** Write a diagnostic into the app's own log, beside the Rust side. */
+  logClient(message: string): Promise<void> {
+    return invoke('log_client', { message });
+  },
+
   cancelScan(): Promise<void> {
     return invoke('cancel_scan');
   },

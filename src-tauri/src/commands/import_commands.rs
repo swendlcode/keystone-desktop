@@ -84,3 +84,16 @@ fn enqueue(state: &State<'_, AppState>, files: Vec<PathBuf>) -> usize {
     );
     count
 }
+
+/// A line from the webview, written into the app's own log.
+///
+/// The webview console is not the dev terminal, so a diagnostic the frontend
+/// computes — why playback failed, what a probe of the asset URL returned —
+/// is invisible to anyone reading the log that already carries the Rust side
+/// of the same story. This puts both halves in one place.
+///
+/// Deliberately `warn`: nothing routine calls it.
+#[tauri::command]
+pub fn log_client(message: String) {
+    tracing::warn!(target: "keystone_lib::client", "{message}");
+}
