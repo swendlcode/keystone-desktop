@@ -32,3 +32,9 @@ pnpm-debug.log*
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
+
+# Export target logos. Other companies' trademarks, supplied locally rather
+# than redistributed — see src/assets/brands/README.md. The lettered badges
+# are the fallback, so a clean checkout still builds and looks finished.
+src/assets/brands/*.svg
+src/assets/brands/*.png
