@@ -1,5 +1,10 @@
 # Keystone — Project Context
 
+> `AGENTS.md` is a symlink to this file. Agents that look for either name read
+> the same thing, so the two cannot drift. On a Windows checkout without symlink
+> support it lands as a text file containing `CLAUDE.md`, which still points the
+> right way.
+
 Desktop harmonic-mixing analysis for DJ libraries. Offline, local, MIT. A DJ points
 Keystone at their tracks and gets key, tempo, energy, eight phrase-aligned cue points
 and a Camelot wheel that filters the library to what will actually mix — then writes
@@ -86,29 +91,37 @@ src/                    React frontend
   components/
     ui/                 Primitives — Button, Badge, KeyBadge, Select, Toggle, icons.ts
     wheel/              CamelotWheel + geometry + segments — the app's signature object
-    library/            TrackTable (virtualized), TrackRow, columns, AnalysisQueue
+    library/            TrackTable (virtualized), TrackRow, columns, AnalysisQueue,
+                        BpmPicker / EnergyPicker (the overrides, edited in place)
     player/             PlayerBar, WaveformView (canvas), CueMarkers, VirtualPiano
     tags/               The tag-editing view: TagTable, GlobalReplacePanel, editors
-    collections/        Sidebar collections, with drag-to-collection
+    collections/        Sidebar collections, with drag-to-collection; DragGhost
     settings/           One pane per SPEC.md §3 rail item
     menu/               The track context menu from SPEC.md §4
     layout/             Sidebar, TitleBar, MainPanel
   pages/                LibraryPage, TagsPage, SettingsPage
   hooks/                useLibrary, useAnalysis, useCues, useCollections, usePlayer,
-                        useSettings, useKeyboard
+                        useSettings, useKeyboard, useDragSession
   services/             keystoneService — the ONLY layer that calls `invoke()`
   stores/               libraryStore, playerStore, analysisStore, collectionStore,
-                        settingsStore, uiStore (Zustand)
+                        dragStore, settingsStore, uiStore (Zustand)
   types/                Shared TS types, re-exported from index.ts; ipc.ts holds the
                         event-name table
   utils/                camelot, camelotColors, formatters
   data/changelog.json   Release notes, read by CI to build the GitHub release body
+
+scripts/
+  camelot-scale.mjs     Colour-ramp check, run by `npm run build`
+  mcp-sidecar.mjs       Builds keystone-mcp into src-tauri/binaries/ for a bundle
 
 src-tauri/              Rust backend
   Cargo.toml            Feature flags: `eval` (harness), `beat-this` (the gated model)
   tauri.conf.json       assetProtocol enabled, scope ["**"]; updater artifacts on
   src/
     main.rs             Bin stub; calls keystone_lib::run()
+    bin/mcp.rs          `keystone-mcp` — the MCP server. See "MCP server" below
+    mcp/                The agent tool surface: context, catalog, stdio, tools/
+    bridge/             Loopback HTTP the MCP server talks to while the app runs
     lib.rs              Builder chain. Startup order: recover renames, then resume work
     handlers.rs         `keystone_invoke_handler!` — the one invoke table
     state.rs            AppState: pool, repos, indexer, queue, watcher, settings
@@ -811,6 +824,81 @@ Brand source artwork lives in `../keystone-assets` and its README documents how 
 Tauri icon set was generated. The app's own inline marks are
 `src/assets/logo/*.svg` + `components/ui/LogoMark.tsx`.
 
+## Dragging rows to a collection
+
+Rows are dragged with the **pointer**, not with HTML5 drag-and-drop. That is a
+deliberate replacement, and the reasons are all still live, so it must not go
+back:
+
+- `dataTransfer.getData` returns nothing during `dragover`. The payload had to
+  be smuggled through the *type* list, and every target guessed at what was
+  coming before it could decide whether to light up.
+- **`dragDropEnabled` is on** for the window, because Finder imports need
+  Tauri's native handler — and that handler sits in front of the webview's own
+  drop. The "Drop to analyse" sheet throwing itself over the sidebar the moment
+  a row was picked up was the visible half of the same collision, and the flag
+  is documented as breaking frontend drag-and-drop outright on Windows.
+- The rows sat 2px apart under `gap-0.5` with **no drop target in the gap**, so
+  a drop aimed at the boundary between two collections landed on neither.
+
+The mechanism now:
+
+- `stores/dragStore.ts` holds the session — one payload, the pointer position,
+  the zone under it — plus `armPointerDrag` (a press becomes a drag only after
+  `DRAG_THRESHOLD` px, which is what stops it stealing clicks) and the zone
+  registry, which is a plain `Map` rather than store state because zones come
+  and go with mounted rows and are read once per pointer move.
+- `hooks/useDragSession.ts` owns the window listeners, mounted once in `App`.
+  **`pointerup` resolves the drop with the same hit test `pointermove` used for
+  the highlight**, so the row that lit up is by construction the row that
+  receives. Keep that identity: the old code decided the highlight in
+  `dragover` and the destination in `drop`, and two hit tests are two chances
+  to disagree.
+- Hit-testing is `document.elementFromPoint` against `[data-drop-zone]`, read
+  off the DOM rather than from cached rectangles, so a list that scrolls or
+  reflows mid-drag cannot hand back a stale target. The ghost is
+  `pointer-events-none`, which is what keeps it from being the answer to every
+  hit test.
+- Each `CollectionRow` carries the gap to the row below it as padding rather
+  than letting the list space them, so there are no dead pixels.
+- `armPointerDrag` bails when `ev.buttons === 0`. A button released outside the
+  window never reaches the listener, and without that check the arming
+  survives and the next idle pointer move starts a drag nobody pressed for.
+- `collections/DragGhost.tsx` is the drag image, and it shows the carried
+  track's **key, energy and tempo**. `setDragImage` could not: it snapshots at
+  `dragstart` and never again. Filing a track into a crate is a judgement about
+  how it will mix, and the drag used to cover the row whose numbers justified
+  it.
+- `draggingTracks` is **derived** from the session, not stored. It used to be
+  its own field written by the row that started the drag and cleared by
+  whichever of `dragend` or `drop` ran first — two writers for one fact, and a
+  drop that never fired left the sidebar lit with nothing in the air.
+
+Finder imports are untouched and stay on the native handler. `useFileDrop`
+keeps its guard against an internal drag even though a pointer drag starts no
+native session: the cost of being wrong is the overlay covering the drop
+target again.
+
+## The three overrides are all wired now
+
+`set_track_key`, `set_track_tempo` and `set_track_energy` were each written,
+registered in the invoke table, and called by nothing — so the three numbers a
+DJ is most likely to want the last word on were the three that could not be
+corrected from inside the app. All three now have a picker:
+
+- `player/KeyPicker.tsx` — the wheel, as the picker.
+- `library/EnergyPicker.tsx` — a 1-10 ramp, in the player bar *and* the column.
+- `library/BpmPicker.tsx` — a tempo field in both places, with **Halve** and
+  **Double**. Octave errors are the actual tempo mistake, not arbitrary wrong
+  readings: drum & bass read at 87 instead of 174, half-time hip-hop at 140
+  instead of 70. `set_tempo` writes raw and display together and zeroes the
+  octave shift, because a typed tempo is already what the user wants to see.
+
+Each stamps `ValueSource::User`, which is what stops the next analysis pass
+reverting it. A correction a re-analysis undoes is worse than no correction, so
+if a fourth override is ever added, it carries that stamp or it is not an
+override.
+
 ## MCP server (agent access)
 
 `keystone-mcp` is a third binary in the same crate (`src-tauri/src/bin/mcp.rs`)
@@ -963,9 +1051,12 @@ Costs worth knowing before anything here is optimised:
 
 Still outstanding, unchanged:
 
-- **`tauri.conf.json` has an empty updater `endpoints` array.** Point it at the
-  `latest.json` asset on the latest release before the first tagged build, or installs
-  will never see an update and nothing will report an error.
+- **Builds up to and including v0.1.0 cannot self-update.** The updater
+  `endpoints` array was empty when 0.1.0 shipped, so those installs have no URL
+  baked in to check and nothing reports an error. It now points at the
+  `latest.json` asset on the latest release, the way Stack's and Capstone's
+  always did, so releases after 0.1.0 update normally — but 0.1.0 has to be
+  replaced by hand. v0.1.1 is the bridge release.
 - **`src-tauri/resources/` is empty** and `docs/screenshot.png` does not exist yet.
 - No Windows measurement of anything. Windows is roughly two thirds of installs;
   re-measure before any "time remaining" is shown to a user.
