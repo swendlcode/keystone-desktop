@@ -1,15 +1,16 @@
 {
   "0.1.0": {
-    "date": "2026-10-31",
+    "date": "2026-11-01",
     "title": "First release",
     "summary": "Keystone reads your track library, shows key, tempo and energy on a Camelot wheel, and writes what it finds back to your files.",
     "highlights": [
-      "Camelot wheel: pick a key and the library narrows to it and everything that mixes with it.",
-      "Key, tempo and energy on every row, with cue markers you can drag on the waveform.",
-      "Where the key is genuinely ambiguous, Keystone shows both instead of guessing a letter.",
-      "Write key, energy and tempo into your tags, or into the filename, with a preview and an undo.",
+      "Camelot wheel: pick a key and the library narrows to it and to everything that mixes with it.",
+      "Key, tempo and energy on every row, with cue markers you drag on the waveform.",
+      "Where a key is genuinely ambiguous, Keystone shows both candidates instead of guessing a letter.",
+      "Write key, energy and tempo into your tags or your filenames, with a preview first and an undo after.",
       "Send cue points to rekordbox and Traktor. Your collection is backed up before anything is written.",
-      "Collections, ratings and search over your whole library.",
+      "Collections, ratings, bulk tag editing and search across the whole library.",
+      "Import playlists from the Music app, or from any .m3u.",
       "Everything runs on your machine. No account, no uploads."
     ]
   }
