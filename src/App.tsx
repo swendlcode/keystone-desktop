@@ -6,6 +6,7 @@ import { MainPanel } from './components/layout/MainPanel';
 import { ViewTabs } from './components/layout/ViewTabs';
 import { StatusBar } from './components/layout/StatusBar';
 import { DropOverlay } from './components/layout/DropOverlay';
+import { DragGhost } from './components/collections/DragGhost';
 import { PlayerBar } from './components/player/PlayerBar';
 import { TrackContextMenu } from './components/menu/TrackContextMenu';
 import { RemoveSelectedShortcut } from './components/library/RemoveSelectedShortcut';
@@ -14,6 +15,7 @@ import { useUiStore } from './stores/uiStore';
 import { useLibrarySync } from './hooks/useLibrary';
 import { useAnalysisSync } from './hooks/useAnalysis';
 import { useKeyboard } from './hooks/useKeyboard';
+import { useDragSession } from './hooks/useDragSession';
 
 const LibraryPage = lazy(() =>
   import('./pages/LibraryPage').then((m) => ({ default: m.LibraryPage })),
@@ -34,6 +36,7 @@ export default function App() {
   useLibrarySync();
   useAnalysisSync();
   useKeyboard();
+  useDragSession();
 
   return (
     <div className="h-app flex w-full flex-col overflow-hidden bg-keystone-black">
@@ -56,6 +59,9 @@ export default function App() {
       </div>
       <StatusBar />
       <DropOverlay />
+
+      {/* Follows the pointer while rows are being dragged to a collection. */}
+      <DragGhost />
       {/* One menu for every table: its anchor is `uiStore.contextMenu`, which
           both the library and the tag table write to. Mounted here rather than
           per table so a right-click cannot leave two open. */}

@@ -1,8 +1,13 @@
-import { useState, type DragEvent } from 'react';
+import { useEffect, useRef } from 'react';
 import { Flash } from '../ui/icons';
-import { useCollectionStore } from '../../stores/collectionStore';
 import { formatCount } from '../../utils/formatters';
-import { COLLECTION_ID_MIME, hasType, readTrackDrag, TRACK_IDS_MIME } from './dragTypes';
+import {
+  armPointerDrag,
+  DROP_ZONE_ATTR,
+  registerDropZone,
+  useDragStore,
+  type DragPayload,
+} from '../../stores/dragStore';
 import type { Collection } from '../../types';
 
 interface CollectionRowProps {
@@ -29,6 +34,11 @@ interface CollectionRowProps {
  * to be an object. The selected row takes a neutral highlight and lets the
  * pill carry the accent — tinting the whole row accent as well left two
  * things competing to say "this one".
+ *
+ * The outer element is the drop zone and carries the gap to the row below it
+ * as padding rather than letting the list space the rows. Under `gap-0.5`
+ * there were two pixels between every pair of rows that belonged to neither,
+ * and a drop aimed at the boundary landed on nothing at all.
  */
 export function CollectionRow({
   collection,
@@ -39,35 +49,65 @@ export function CollectionRow({
   onMenu,
 }: CollectionRowProps) {
   const smart = collection.kind === 'smart';
-  const drop = useRowDrop({ id: collection.id, smart, onAddTracks, onReorder });
+  const over = useDragStore((s) => s.overId === collection.id);
+  const incoming = useDragStore((s) => s.payload?.kind ?? null);
+
+  // The zone is registered for the row's lifetime, but the handlers it calls
+  // are fresh closures on every render. A ref keeps the registration stable
+  // while the behaviour stays current.
+  const handlers = useRef({ onAddTracks, onReorder });
+  handlers.current = { onAddTracks, onReorder };
+
+  useEffect(
+    () =>
+      registerDropZone(collection.id, {
+        accepts: smart ? ['collection'] : ['tracks', 'collection'],
+        onDrop: (payload) => {
+          if (payload.kind === 'tracks') {
+            handlers.current.onAddTracks(payload.trackIds);
+            return;
+          }
+          // Dropping a collection on itself is a cancelled reorder.
+          if (payload.collectionId !== collection.id) {
+            handlers.current.onReorder(payload.collectionId, collection.id);
+          }
+        },
+      }),
+    [collection.id, smart],
+  );
 
   return (
-    <div
-      draggable
-      onDragStart={(e) => e.dataTransfer.setData(COLLECTION_ID_MIME, collection.id)}
-      onDragOver={drop.onDragOver}
-      onDragLeave={drop.onDragLeave}
-      onDrop={drop.onDrop}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        onMenu(e.clientX, e.clientY);
-      }}
-      className={`group/row flex items-center gap-2 rounded-md px-2.5 py-2 text-xs transition-colors ${
-        drop.over === 'tracks'
-          ? 'bg-keystone-lime/20 text-keystone-lime ring-1 ring-inset ring-keystone-lime/50'
-          : drop.over === 'order'
-            ? 'bg-gray-700'
-            : active
-              ? 'bg-gray-700 text-keystone-white'
-              : 'text-gray-300 hover:bg-gray-800 hover:text-keystone-white'
-      }`}
-    >
-      <RowButton
-        collection={collection}
-        smart={smart}
-        active={active}
-        onSelect={onSelect}
-      />
+    <div {...{ [DROP_ZONE_ATTR]: collection.id }} className="pb-0.5">
+      <div
+        onPointerDown={(e) => {
+          if (e.button !== 0) return;
+          armPointerDrag(
+            e.clientX,
+            e.clientY,
+            (): DragPayload => ({ kind: 'collection', collectionId: collection.id }),
+          );
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onMenu(e.clientX, e.clientY);
+        }}
+        className={`group/row flex items-center gap-2 rounded-md px-2.5 py-2 text-xs transition-colors ${
+          over && incoming === 'tracks'
+            ? 'bg-keystone-lime/20 text-keystone-lime ring-1 ring-inset ring-keystone-lime/50'
+            : over && incoming === 'collection'
+              ? 'bg-gray-700'
+              : active
+                ? 'bg-gray-700 text-keystone-white'
+                : 'text-gray-300 hover:bg-gray-800 hover:text-keystone-white'
+        }`}
+      >
+        <RowButton
+          collection={collection}
+          smart={smart}
+          active={active}
+          onSelect={onSelect}
+        />
+      </div>
     </div>
   );
 }
@@ -108,54 +148,4 @@ function RowButton({
       </span>
     </button>
   );
-}
-
-/**
- * The row's two drop behaviours, kept together because they are one decision.
- *
- * `getData` returns nothing during `dragover` — only the type list is readable
- * — so which payload is coming has to be told from `dataTransfer.types`, and
- * the drop highlight depends on getting that right before the drop lands.
- */
-function useRowDrop({
-  id,
-  smart,
-  onAddTracks,
-  onReorder,
-}: {
-  id: string;
-  smart: boolean;
-  onAddTracks: (trackIds: string[]) => void;
-  onReorder: (draggedId: string, beforeId: string) => void;
-}) {
-  const [over, setOver] = useState<null | 'tracks' | 'order'>(null);
-
-  const onDragOver = (e: DragEvent) => {
-    // A smart collection's membership is a rule, so a track drop on one would
-    // appear to work and then not.
-    if (hasType(e.dataTransfer, TRACK_IDS_MIME) && !smart) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'copy';
-      setOver('tracks');
-    } else if (hasType(e.dataTransfer, COLLECTION_ID_MIME)) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      setOver('order');
-    }
-  };
-
-  const onDrop = (e: DragEvent) => {
-    e.preventDefault();
-    setOver(null);
-    useCollectionStore.getState().setDraggingTracks(null);
-    const dragged = e.dataTransfer.getData(COLLECTION_ID_MIME);
-    if (dragged && dragged !== id) {
-      onReorder(dragged, id);
-      return;
-    }
-    const ids = readTrackDrag(e.dataTransfer);
-    if (ids.length && !smart) onAddTracks(ids);
-  };
-
-  return { over, onDragOver, onDragLeave: () => setOver(null), onDrop };
 }

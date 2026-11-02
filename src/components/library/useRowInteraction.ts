@@ -1,6 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { setTrackDrag } from '../collections/dragTypes';
-import { useCollectionStore } from '../../stores/collectionStore';
+import { armPointerDrag } from '../../stores/dragStore';
 import type { TrackWindow } from './useTrackWindow';
 import { useLibraryStore } from '../../stores/libraryStore';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -72,7 +71,7 @@ export function useRowInteraction(window: TrackWindow) {
   );
 
   /**
-   * Drag rows out to a collection in the sidebar.
+   * Press and move to drag rows out to a collection in the sidebar.
    *
    * This is the library table only. The tag table had it too and should not:
    * that view is a grid of fields being typed into, where a press-and-move
@@ -82,18 +81,18 @@ export function useRowInteraction(window: TrackWindow) {
    * Dragging a row outside the selection drags that row alone, which is what
    * every file manager does.
    */
-  const onRowDragStart = useCallback((e: React.DragEvent, index: number) => {
+  const onRowPointerDown = useCallback((e: React.PointerEvent, index: number) => {
+    if (e.button !== 0) return;
     const track = winRef.current.trackAt(index);
     if (!track) return;
-    const selected = useLibraryStore.getState().selectedIds;
-    const ids = selected.has(track.id) ? [...selected] : [track.id];
-    setTrackDrag(e.dataTransfer, ids);
-    // Lights the collections, so the drag has somewhere visibly to go.
-    useCollectionStore.getState().setDraggingTracks(ids.length);
-  }, []);
 
-  const onRowDragEnd = useCallback(() => {
-    useCollectionStore.getState().setDraggingTracks(null);
+    armPointerDrag(e.clientX, e.clientY, () => {
+      // `mousedown` has already run the selection logic by the time the
+      // pointer travels, so this reads the row the user just pressed.
+      const selected = useLibraryStore.getState().selectedIds;
+      const ids = selected.has(track.id) ? [...selected] : [track.id];
+      return { kind: 'tracks', trackIds: ids, lead: track };
+    });
   }, []);
 
   const onRowContextMenu = useCallback((e: React.MouseEvent, index: number) => {
@@ -119,8 +118,7 @@ export function useRowInteraction(window: TrackWindow) {
     play,
     onRowMouseDown,
     onRowDoubleClick,
-    onRowDragStart,
-    onRowDragEnd,
+    onRowPointerDown,
     onRowContextMenu,
   };
 }

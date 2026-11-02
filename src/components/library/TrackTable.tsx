@@ -112,8 +112,7 @@ export function TrackTable({ window: win, onPageChange }: TrackTableProps) {
                     decimals={settings?.tempoDecimals ?? 0}
                     onRowMouseDown={rows.onRowMouseDown}
                     onRowDoubleClick={rows.onRowDoubleClick}
-                    onRowDragStart={rows.onRowDragStart}
-                    onRowDragEnd={rows.onRowDragEnd}
+                    onRowPointerDown={rows.onRowPointerDown}
                     onRowContextMenu={rows.onRowContextMenu}
                     onRate={onRate}
                   />

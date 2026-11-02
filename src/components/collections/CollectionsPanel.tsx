@@ -7,6 +7,7 @@ import { CollectionRow } from './CollectionRow';
 import { CollectionNameDialog } from './CollectionNameDialog';
 import { collectionMenuItems } from './useCollectionMenu';
 import { useCollectionStore } from '../../stores/collectionStore';
+import { useDraggingTrackCount } from '../../stores/dragStore';
 import { useLibraryStore } from '../../stores/libraryStore';
 import { useLibraryTotal } from '../../hooks/useLibrary';
 import { formatCount } from '../../utils/formatters';
@@ -33,7 +34,7 @@ export function CollectionsPanel() {
   const selectCollection = useLibraryStore((s) => s.selectCollection);
   const creating = useCollectionStore((s) => s.creating);
   const setCreating = useCollectionStore((s) => s.setCreating);
-  const dragging = useCollectionStore((s) => s.draggingTracks);
+  const dragging = useDraggingTrackCount();
   const renamingId = useCollectionStore((s) => s.renamingId);
   const stopRename = useCollectionStore((s) => s.stopRename);
   const renaming = collections.find((c) => c.id === renamingId) ?? null;
@@ -79,7 +80,7 @@ export function CollectionsPanel() {
           </p>
         )}
 
-        <div className="mt-1 flex flex-col gap-0.5">
+        <div className="mt-1 flex flex-col">
           {collections.map((c) => (
             <CollectionRow
               key={c.id}
@@ -213,7 +214,7 @@ function AllTracksRow() {
 }
 
 function PanelHeader({ onNew }: { onNew: () => void }) {
-  const dragging = useCollectionStore((s) => s.draggingTracks);
+  const dragging = useDraggingTrackCount();
   return (
     <div className="flex items-center justify-between px-3 pb-1 pt-3">
       <span className="label">

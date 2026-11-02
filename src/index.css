@@ -192,6 +192,18 @@
   ::-webkit-scrollbar-thumb:hover {
     background: rgb(var(--gray-500));
   }
+
+  /* While a row is being dragged to a collection. The pointer owns the
+     gesture, so the text it passes over must not be selected by it, and the
+     cursor has to keep saying "carrying" even over elements with a cursor of
+     their own. */
+  body.dragging {
+    cursor: grabbing;
+    user-select: none;
+  }
+  body.dragging * {
+    cursor: grabbing !important;
+  }
 }
 
 @layer components {

@@ -1,8 +1,9 @@
 import { MusicSquare } from '../ui/icons';
 import { Rating } from '../ui/Rating';
 import { KeyResult } from './KeyResult';
+import { BpmPicker } from './BpmPicker';
 import { EnergyPicker } from './EnergyPicker';
-import { CueCountValue, TempoValue } from './TrackValues';
+import { CueCountValue } from './TrackValues';
 import { useCoverArt } from './useCoverArt';
 import type { KeyNotation, TempoDecimals, Track, TrackColumn } from '../../types';
 import {
@@ -55,7 +56,10 @@ export function TrackCell({
       return <KeyResult track={track} notation={notation} pad={pad} />;
 
     case 'tempo':
-      return <TempoValue track={track} decimals={decimals} />;
+      // Editable in place, for the same reason energy is: an octave error is
+      // visible in the column and was only correctable from the player bar,
+      // which meant playing a track to fix a number already on screen.
+      return <BpmPicker track={track} decimals={decimals} />;
 
     case 'energy':
       // Editable in place, like the rating beside it. Energy is the reading

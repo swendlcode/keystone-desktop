@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { keystoneService } from '../services/keystoneService';
-import { useCollectionStore } from '../stores/collectionStore';
+import { useDragStore } from '../stores/dragStore';
 
 /**
  * Drag files or folders from Finder onto the window.
@@ -36,8 +36,10 @@ export function useFileDrop() {
         // handler does not always tell them apart, and when it does not, the
         // whole-window "Drop to analyse" sheet threw itself over the app the
         // moment a track was picked up — covering the sidebar the track was
-        // being dragged to.
-        if (useCollectionStore.getState().draggingTracks != null) {
+        // being dragged to. Internal drags are pointer drags now and start no
+        // native session, so this should no longer fire; it stays because the
+        // cost of being wrong is the overlay covering the drop target again.
+        if (useDragStore.getState().payload != null) {
           if (hoveringRef.current) setHovering(false);
           return;
         }

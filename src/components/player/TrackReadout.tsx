@@ -3,7 +3,7 @@ import { Keyboard } from '../ui/icons';
 import { CueStepper } from './CueStepper';
 import { EnergyPicker } from '../library/EnergyPicker';
 import { KeyPicker } from './KeyPicker';
-import { TempoValue } from '../library/TrackValues';
+import { BpmPicker } from '../library/BpmPicker';
 import { useUiStore } from '../../stores/uiStore';
 import type { Settings, Track } from '../../types';
 
@@ -46,7 +46,7 @@ export function TrackReadout({ track, settings, onSeek }: TrackReadoutProps) {
       </Readout>
 
       <Readout label="BPM">
-        <TempoValue track={track} decimals={settings?.tempoDecimals ?? 0} />
+        <BpmPicker track={track} decimals={settings?.tempoDecimals ?? 0} />
       </Readout>
 
       <Divider />

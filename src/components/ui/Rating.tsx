@@ -26,6 +26,10 @@ export function Rating({ value, onChange, className = '' }: RatingProps) {
           type="button"
           disabled={readOnly}
           aria-label={`${n} of 5`}
+          // A 2px target must not double as a drag handle: without this a
+          // press that jiggles starts dragging the row and swallows the click
+          // that was setting the rating.
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onChange?.(current === n ? 0 : n);
