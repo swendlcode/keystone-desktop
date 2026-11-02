@@ -210,6 +210,19 @@ export function useSetTrackEnergy() {
   });
 }
 
+/** Override the detected tempo by hand. */
+export function useSetTrackTempo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, bpm }: { id: string; bpm: number }) =>
+      keystoneService.setTrackTempo(id, bpm),
+    onSuccess: (track) => {
+      qc.setQueryData(trackKeys.byId(track.id), track);
+      patchTrackInPages(qc, track);
+    },
+  });
+}
+
 export function useRemoveTracks() {
   const qc = useQueryClient();
   const clearSelection = useLibraryStore((s) => s.clearSelection);

@@ -1,6 +1,5 @@
 import { useState, type DragEvent } from 'react';
 import { Flash } from '../ui/icons';
-import { Input } from '../ui/Input';
 import { useCollectionStore } from '../../stores/collectionStore';
 import { formatCount } from '../../utils/formatters';
 import { COLLECTION_ID_MIME, hasType, readTrackDrag, TRACK_IDS_MIME } from './dragTypes';
@@ -10,7 +9,6 @@ interface CollectionRowProps {
   collection: Collection;
   active: boolean;
   onSelect: () => void;
-  onRename: (name: string) => void;
   onAddTracks: (trackIds: string[]) => void;
   onReorder: (draggedId: string, beforeId: string) => void;
   /** Right-click. The panel owns the menu so only one can be open. */
@@ -36,18 +34,12 @@ export function CollectionRow({
   collection,
   active,
   onSelect,
-  onRename,
   onAddTracks,
   onReorder,
   onMenu,
 }: CollectionRowProps) {
-  const renamingId = useCollectionStore((s) => s.renamingId);
   const smart = collection.kind === 'smart';
   const drop = useRowDrop({ id: collection.id, smart, onAddTracks, onReorder });
-
-  if (renamingId === collection.id) {
-    return <RenameField initial={collection.name} onSubmit={onRename} />;
-  }
 
   return (
     <div
@@ -91,12 +83,14 @@ function RowButton({
   active: boolean;
   onSelect: () => void;
 }) {
-  const startRename = useCollectionStore((s) => s.startRename);
   return (
     <button
       type="button"
       onClick={onSelect}
-      onDoubleClick={() => !smart && startRename(collection.id)}
+      // No rename on double-click. That gesture is also "I meant to click and
+      // the pointer moved", and a collection the user was only selecting
+      // should not become editable because of it. Renaming is in the
+      // right-click menu, where it is deliberate and discoverable.
       className="flex min-w-0 flex-1 items-center gap-2 text-left"
     >
       {smart && <Flash size={13} color="currentColor" variant="Linear" />}
@@ -164,37 +158,4 @@ function useRowDrop({
   };
 
   return { over, onDragOver, onDragLeave: () => setOver(null), onDrop };
-}
-
-function RenameField({
-  initial,
-  onSubmit,
-}: {
-  initial: string;
-  onSubmit: (name: string) => void;
-}) {
-  const [value, setValue] = useState(initial);
-  const stopRename = useCollectionStore((s) => s.stopRename);
-
-  const commit = () => {
-    const name = value.trim();
-    // An empty name leaves an unclickable blank row, so a cleared field is a
-    // cancel rather than a rename to "".
-    if (name && name !== initial) onSubmit(name);
-    else stopRename();
-  };
-
-  return (
-    <Input
-      autoFocus
-      value={value}
-      className="h-8"
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') commit();
-        if (e.key === 'Escape') stopRename();
-      }}
-    />
-  );
 }

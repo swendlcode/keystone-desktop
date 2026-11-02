@@ -77,7 +77,7 @@ export function useTrackMenu(
       liveTargets,
       refresh: () => void refresh(),
       refreshCues: () => void qc.invalidateQueries({ queryKey: cueKeys.byTrack(track.id) }),
-      openInfo: () => openInfo(track.id),
+      openInfo: () => openInfo(track.id, targetIds),
       ask,
     };
     const fileable = collections.filter((c) => c.kind !== 'smart');

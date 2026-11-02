@@ -4,8 +4,8 @@ import { ScrollArea } from '../ui/ScrollArea';
 import { ConfirmDialog } from '../settings/ConfirmDialog';
 import { Menu } from '../menu/Menu';
 import { CollectionRow } from './CollectionRow';
+import { CollectionNameDialog } from './CollectionNameDialog';
 import { collectionMenuItems } from './useCollectionMenu';
-import { NewCollectionField } from './NewCollectionField';
 import { useCollectionStore } from '../../stores/collectionStore';
 import { useLibraryStore } from '../../stores/libraryStore';
 import { useLibraryTotal } from '../../hooks/useLibrary';
@@ -34,6 +34,9 @@ export function CollectionsPanel() {
   const creating = useCollectionStore((s) => s.creating);
   const setCreating = useCollectionStore((s) => s.setCreating);
   const dragging = useCollectionStore((s) => s.draggingTracks);
+  const renamingId = useCollectionStore((s) => s.renamingId);
+  const stopRename = useCollectionStore((s) => s.stopRename);
+  const renaming = collections.find((c) => c.id === renamingId) ?? null;
 
   const create = useCreateCollection();
   const rename = useRenameCollection();
@@ -70,8 +73,6 @@ export function CollectionsPanel() {
           dragging ? 'rounded-md bg-keystone-lime/[0.06] ring-1 ring-inset ring-keystone-lime/40' : ''
         }`}
       >
-        {creating && <NewCollectionField onCreate={(name) => create.mutate(name)} />}
-
         {dragging && collections.length === 0 && (
           <p className="mt-2 px-1 text-[11px] leading-relaxed text-gray-400">
             No collections yet — make one with + above, then drop onto it.
@@ -85,7 +86,6 @@ export function CollectionsPanel() {
               collection={c}
               active={selectedId === c.id}
               onSelect={() => selectCollection(selectedId === c.id ? null : c.id)}
-              onRename={(name) => rename.mutate({ id: c.id, name })}
               onAddTracks={(trackIds) => addTracks.mutate({ collectionId: c.id, trackIds })}
               onReorder={onReorder}
               onMenu={(x, y) => setMenu({ x, y, collection: c })}
@@ -103,6 +103,33 @@ export function CollectionsPanel() {
             onDelete: () => setPendingDelete(menu.collection),
           })}
           onClose={() => setMenu(null)}
+        />
+      )}
+
+      {creating && (
+        <CollectionNameDialog
+          title="New collection"
+          confirmLabel="Create"
+          busy={create.isPending}
+          onCancel={() => setCreating(false)}
+          onConfirm={(name) => {
+            create.mutate(name);
+            setCreating(false);
+          }}
+        />
+      )}
+
+      {renaming && (
+        <CollectionNameDialog
+          title="Rename collection"
+          initial={renaming.name}
+          confirmLabel="Rename"
+          busy={rename.isPending}
+          onCancel={stopRename}
+          onConfirm={(name) => {
+            rename.mutate({ id: renaming.id, name });
+            stopRename();
+          }}
         />
       )}
 

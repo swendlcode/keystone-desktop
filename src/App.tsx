@@ -9,6 +9,7 @@ import { DropOverlay } from './components/layout/DropOverlay';
 import { PlayerBar } from './components/player/PlayerBar';
 import { TrackContextMenu } from './components/menu/TrackContextMenu';
 import { RemoveSelectedShortcut } from './components/library/RemoveSelectedShortcut';
+import { SongInfoDialog } from './components/library/SongInfoDialog';
 import { useUiStore } from './stores/uiStore';
 import { useLibrarySync } from './hooks/useLibrary';
 import { useAnalysisSync } from './hooks/useAnalysis';
@@ -62,6 +63,11 @@ export default function App() {
       {/* Backspace / Delete on the selection. Mounted here so one listener
           and one confirmation serve both tables. */}
       <RemoveSelectedShortcut />
+      {/* Song Info. Mounted here because the context menu that opens it is
+          here, and because it outlives the menu — selecting the item closes
+          the menu, so a panel the menu owned would unmount in the same
+          tick. */}
+      <SongInfoDialog />
     </div>
   );
 }

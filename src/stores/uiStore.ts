@@ -73,6 +73,14 @@ interface UiStore {
   columnOrder: TrackColumn[];
   /** Track id whose Song Info panel is open, or null. */
   infoTrackId: string | null;
+  /**
+   * The rows Song Info can step between with Previous / Next.
+   *
+   * The selection the panel was opened over. Reviewing twenty tracks one
+   * after another is most of what the panel is for, and closing and
+   * reopening it per row is the gesture that makes people stop using it.
+   */
+  infoSiblings: string[];
   /** The virtual piano panel, which shows the detected key's scale. */
   pianoOpen: boolean;
   /** Context menu anchor, or null when closed. One menu at a time. */
@@ -82,7 +90,7 @@ interface UiStore {
   toggleSidebar: () => void;
   setSidebarWidth: (width: number) => void;
   setColumnOrder: (order: TrackColumn[]) => void;
-  openInfo: (trackId: string) => void;
+  openInfo: (trackId: string, siblings?: string[]) => void;
   closeInfo: () => void;
   togglePiano: () => void;
   openContextMenu: (menu: NonNullable<UiStore['contextMenu']>) => void;
@@ -95,6 +103,7 @@ export const useUiStore = create<UiStore>((set) => ({
   sidebarWidth: loadWidth(),
   columnOrder: loadColumnOrder(),
   infoTrackId: null,
+  infoSiblings: [],
   pianoOpen: false,
   contextMenu: null,
 
@@ -130,8 +139,9 @@ export const useUiStore = create<UiStore>((set) => ({
     set({ columnOrder });
   },
 
-  openInfo: (infoTrackId) => set({ infoTrackId }),
-  closeInfo: () => set({ infoTrackId: null }),
+  openInfo: (infoTrackId, siblings = []) =>
+    set({ infoTrackId, infoSiblings: siblings, contextMenu: null }),
+  closeInfo: () => set({ infoTrackId: null, infoSiblings: [] }),
   togglePiano: () => set((s) => ({ pianoOpen: !s.pianoOpen })),
   openContextMenu: (contextMenu) => set({ contextMenu }),
   closeContextMenu: () => set({ contextMenu: null }),
