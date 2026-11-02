@@ -1,5 +1,4 @@
 import { KeyResult } from '../library/KeyResult';
-import { setTrackDrag } from '../collections/dragTypes';
 import { CoverArtThumb } from './CoverArtThumb';
 import { TagCell } from './TagCell';
 import { useFieldWriteCount, useWriteField } from './useTagEditing';
@@ -48,12 +47,12 @@ export function TagRow({
       className={`grid ${COLS} items-center gap-2 px-3 ${
         selected ? 'bg-keystone-lime/10' : 'hover:bg-gray-800/60'
       }`}
-      draggable
-      onDragStart={(e) =>
-        // Dragging a row outside the selection drags that row alone, which is
-        // what every file manager does.
-        setTrackDrag(e.dataTransfer, selected ? [...selectedIds] : [track.id])
-      }
+      // Not draggable, deliberately. This view is a grid of fields being
+      // typed into: a press-and-move over a cell is far likelier to be a
+      // mis-click or a cancelled edit than an intent to file something, and
+      // the drag it started took the row away mid-edit and opened the tag
+      // editor on the way past. Filing lives in the library table, where a
+      // row is a row and dragging it means one thing.
       onMouseDown={(e) => onRowMouseDown(e, index)}
       onDoubleClick={() => onOpen(track.id)}
       onContextMenu={(e) => {

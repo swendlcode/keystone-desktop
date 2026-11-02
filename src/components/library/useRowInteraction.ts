@@ -1,4 +1,6 @@
 import { useCallback, useRef } from 'react';
+import { setTrackDrag } from '../collections/dragTypes';
+import { useCollectionStore } from '../../stores/collectionStore';
 import type { TrackWindow } from './useTrackWindow';
 import { useLibraryStore } from '../../stores/libraryStore';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -69,6 +71,31 @@ export function useRowInteraction(window: TrackWindow) {
     [play],
   );
 
+  /**
+   * Drag rows out to a collection in the sidebar.
+   *
+   * This is the library table only. The tag table had it too and should not:
+   * that view is a grid of fields being typed into, where a press-and-move
+   * over a cell is far more likely to be a mis-click than an intent to file
+   * something, and the drag it started interrupted the edit.
+   *
+   * Dragging a row outside the selection drags that row alone, which is what
+   * every file manager does.
+   */
+  const onRowDragStart = useCallback((e: React.DragEvent, index: number) => {
+    const track = winRef.current.trackAt(index);
+    if (!track) return;
+    const selected = useLibraryStore.getState().selectedIds;
+    const ids = selected.has(track.id) ? [...selected] : [track.id];
+    setTrackDrag(e.dataTransfer, ids);
+    // Lights the collections, so the drag has somewhere visibly to go.
+    useCollectionStore.getState().setDraggingTracks(ids.length);
+  }, []);
+
+  const onRowDragEnd = useCallback(() => {
+    useCollectionStore.getState().setDraggingTracks(null);
+  }, []);
+
   const onRowContextMenu = useCallback((e: React.MouseEvent, index: number) => {
     const track = winRef.current.trackAt(index);
     if (!track) return;
@@ -92,6 +119,8 @@ export function useRowInteraction(window: TrackWindow) {
     play,
     onRowMouseDown,
     onRowDoubleClick,
+    onRowDragStart,
+    onRowDragEnd,
     onRowContextMenu,
   };
 }

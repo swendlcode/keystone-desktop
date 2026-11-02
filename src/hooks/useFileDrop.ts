@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { keystoneService } from '../services/keystoneService';
+import { useCollectionStore } from '../stores/collectionStore';
 
 /**
  * Drag files or folders from Finder onto the window.
@@ -17,6 +18,10 @@ import { keystoneService } from '../services/keystoneService';
 export function useFileDrop() {
   const [hovering, setHovering] = useState(false);
   const qc = useQueryClient();
+  // Read inside the listener, which is registered once and must not close
+  // over a stale value.
+  const hoveringRef = useRef(hovering);
+  hoveringRef.current = hovering;
 
   useEffect(() => {
     let disposed = false;
@@ -25,6 +30,17 @@ export function useFileDrop() {
     getCurrentWebview()
       .onDragDropEvent((event) => {
         if (disposed) return;
+
+        // A drag that started inside the window is a row on its way to a
+        // collection, not a file arriving from Finder. Tauri's window-level
+        // handler does not always tell them apart, and when it does not, the
+        // whole-window "Drop to analyse" sheet threw itself over the app the
+        // moment a track was picked up — covering the sidebar the track was
+        // being dragged to.
+        if (useCollectionStore.getState().draggingTracks != null) {
+          if (hoveringRef.current) setHovering(false);
+          return;
+        }
 
         if (event.payload.type === 'over') {
           setHovering(true);
