@@ -65,7 +65,7 @@ impl CueRepository {
     /// pads are mapped to.
     pub fn replace_detected(&self, track_id: &str, cues: &[DetectedCue]) -> Result<usize> {
         let mut conn = self.db.get()?;
-        let tx = conn.transaction()?;
+        let tx = crate::db::write_tx(&mut conn)?;
         let held: HashSet<u8> = {
             let mut stmt =
                 tx.prepare("SELECT slot FROM cue_points WHERE track_id = ? AND source = 'user'")?;
@@ -200,7 +200,7 @@ impl CueRepository {
     /// drifts.
     pub fn replace_beatgrid(&self, track_id: &str, markers: &[BeatgridMarker]) -> Result<()> {
         let mut conn = self.db.get()?;
-        let tx = conn.transaction()?;
+        let tx = crate::db::write_tx(&mut conn)?;
         tx.execute("DELETE FROM beatgrid WHERE track_id = ?", [track_id])?;
         {
             let mut stmt = tx.prepare_cached(

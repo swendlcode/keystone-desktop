@@ -74,7 +74,7 @@ impl LibraryRepository {
     /// after the delete and resurrect the folder.
     pub fn remove_watched(&self, path: &str) -> Result<usize> {
         let mut conn = self.db.get()?;
-        let tx = conn.transaction()?;
+        let tx = crate::db::write_tx(&mut conn)?;
         let removed = tx.execute(
             "DELETE FROM tracks WHERE path >= ?1 AND path < ?2",
             rusqlite::params![path, path_upper_bound(path)],

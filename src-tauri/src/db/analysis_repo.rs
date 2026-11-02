@@ -130,7 +130,7 @@ impl AnalysisRepository {
 
     pub fn replace_regions(&self, track_id: &str, regions: &[DetectedRegion]) -> Result<()> {
         let mut conn = self.db.get()?;
-        let tx = conn.transaction()?;
+        let tx = crate::db::write_tx(&mut conn)?;
         tx.execute("DELETE FROM track_regions WHERE track_id = ?", [track_id])?;
         {
             let mut stmt = tx.prepare_cached(

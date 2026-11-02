@@ -18,7 +18,7 @@ impl TrackRepository {
         let mut conn = self.conn()?;
         let mut written = 0usize;
         for batch in rows.chunks(UPSERT_BATCH_SIZE) {
-            let tx = conn.transaction()?;
+            let tx = crate::db::write_tx(&mut conn)?;
             {
                 let mut stmt = tx.prepare_cached(UPSERT_SQL)?;
                 for row in batch {
@@ -103,7 +103,7 @@ impl TrackRepository {
             rows.collect::<rusqlite::Result<_>>()?
         };
 
-        let tx = conn.transaction()?;
+        let tx = crate::db::write_tx(&mut conn)?;
         let mut changed = 0usize;
         {
             let mut stmt = tx.prepare_cached(
@@ -135,7 +135,7 @@ impl TrackRepository {
                  WHERE path IN ({})",
                 placeholders(chunk.len())
             );
-            let tx = conn.transaction()?;
+            let tx = crate::db::write_tx(&mut conn)?;
             {
                 let mut stmt = tx.prepare(&sql)?;
                 let mut bound: Vec<rusqlite::types::Value> =
@@ -164,7 +164,7 @@ impl TrackRepository {
                  WHERE index_status != 'missing' AND path IN ({})",
                 placeholders(chunk.len())
             );
-            let tx = conn.transaction()?;
+            let tx = crate::db::write_tx(&mut conn)?;
             {
                 let mut bound: Vec<rusqlite::types::Value> =
                     vec![rusqlite::types::Value::Integer(stamp)];

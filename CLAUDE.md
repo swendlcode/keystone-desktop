@@ -162,6 +162,48 @@ src-tauri/              Rust backend
     commands/           Thin Tauri handlers, one file per domain
 ```
 
+## Writing to SQLite: always an IMMEDIATE transaction
+
+**`db::write_tx` for any transaction that writes. Never `conn.transaction()`.**
+
+`Connection::transaction()` is DEFERRED: it takes a read lock on the first
+read and asks SQLite to upgrade it on the first write. SQLite refuses that
+upgrade outright with `SQLITE_BUSY` when another connection has committed in
+between, and the busy handler is **deliberately not consulted** for an
+upgrade, because making two readers wait to upgrade would deadlock both. So
+`busy_timeout = 10000` does not cover this at all, which is the opposite of
+what the pragma list suggests.
+
+`collection_repo::add_tracks` reads `MAX(position)` and then inserts, which is
+exactly that shape. Six concurrent writers lost 7 of ~180 calls to
+`database error: database is locked`. It is not an MCP-only path either:
+filing tracks into a crate while the indexer writes is the same two
+connections doing the same thing, and the user would see it as a drag that
+sometimes does nothing.
+
+`two_writers_filing_at_once_do_not_collide` is the guard, and it is a real
+one — reverted to `conn.transaction()` it fails with 8 errors.
+
+Stack had this right from the start (`TransactionBehavior::Immediate`
+everywhere it writes); Keystone was written later and did not inherit it.
+Migrations are the one place DEFERRED is fine, because they run before a
+second connection exists.
+
+## Adding tracks to a collection tolerates ids that have gone
+
+`add_tracks` inserts through `SELECT ... WHERE EXISTS (SELECT 1 FROM tracks
+WHERE id = ?)` rather than a bare `VALUES`. `INSERT OR IGNORE` does **not**
+cover a missing track: SQLite's conflict clause does not apply to FOREIGN KEY
+constraints, so an unknown `track_id` aborted the statement and rolled the
+whole transaction back — ninety-nine good tracks not filed because the
+hundredth had been removed since the caller read the list, reported as
+`database error: FOREIGN KEY constraint failed`.
+
+An agent working from a list it fetched a minute ago hits that routinely, and
+so does a drag that races the reconciler. Callers tell the difference by
+comparing the returned count with what they asked for; the MCP tool reports
+`added`, `requested` and `skipped`.
+
 ## Architectural rules (enforce in reviews)
 
 - **Commands are thin.** No SQL, no DSP, no business logic inside `#[tauri::command]`.

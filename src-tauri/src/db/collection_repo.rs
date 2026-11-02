@@ -135,7 +135,7 @@ impl CollectionRepository {
     /// half-applied order.
     pub fn reorder(&self, ordered_ids: &[String]) -> Result<()> {
         let mut conn = self.db.get()?;
-        let tx = conn.transaction()?;
+        let tx = crate::db::write_tx(&mut conn)?;
         {
             let mut stmt =
                 tx.prepare_cached("UPDATE collections SET position = ?1 WHERE id = ?2")?;
@@ -150,9 +150,22 @@ impl CollectionRepository {
     /// Appends at the end of the existing order. `INSERT OR IGNORE` makes
     /// dropping the same track twice a no-op rather than a constraint error,
     /// which matters because the drop target is a drag away from a duplicate.
+    ///
+    /// The `WHERE EXISTS` is what makes an id that is no longer in the library
+    /// a skip rather than a failure. `OR IGNORE` does not cover it: SQLite's
+    /// conflict clause does not apply to FOREIGN KEY constraints, so a missing
+    /// `track_id` aborted the statement and rolled the whole transaction back
+    /// — ninety-nine good tracks not filed because the hundredth had been
+    /// removed since the caller read the list, reported as
+    /// `database error: FOREIGN KEY constraint failed`. An agent working from
+    /// a list it fetched a minute ago hits that routinely; so does a drag that
+    /// races the reconciler.
+    ///
+    /// Callers that care tell the difference by comparing the returned count
+    /// against what they asked for.
     pub fn add_tracks(&self, collection_id: &str, track_ids: &[String]) -> Result<usize> {
         let mut conn = self.db.get()?;
-        let tx = conn.transaction()?;
+        let tx = crate::db::write_tx(&mut conn)?;
         let mut next: i64 = tx.query_row(
             "SELECT COALESCE(MAX(position), -1) + 1 FROM collection_tracks WHERE collection_id = ?",
             [collection_id],
@@ -162,7 +175,9 @@ impl CollectionRepository {
         {
             let mut stmt = tx.prepare_cached(
                 "INSERT OR IGNORE INTO collection_tracks \
-                 (collection_id, track_id, position, added_at) VALUES (?1, ?2, ?3, ?4)",
+                 (collection_id, track_id, position, added_at) \
+                 SELECT ?1, ?2, ?3, ?4 \
+                 WHERE EXISTS (SELECT 1 FROM tracks WHERE id = ?2)",
             )?;
             let stamp = now();
             for track_id in track_ids {
@@ -187,7 +202,7 @@ impl CollectionRepository {
                 "DELETE FROM collection_tracks WHERE collection_id = ? AND track_id IN ({})",
                 placeholders(chunk.len())
             );
-            let tx = conn.transaction()?;
+            let tx = crate::db::write_tx(&mut conn)?;
             {
                 let mut bound: Vec<rusqlite::types::Value> =
                     vec![rusqlite::types::Value::Text(collection_id.to_string())];
@@ -201,7 +216,7 @@ impl CollectionRepository {
 
     pub fn set_track_positions(&self, collection_id: &str, ordered_ids: &[String]) -> Result<()> {
         let mut conn = self.db.get()?;
-        let tx = conn.transaction()?;
+        let tx = crate::db::write_tx(&mut conn)?;
         {
             let mut stmt = tx.prepare_cached(
                 "UPDATE collection_tracks SET position = ?1 \

@@ -137,6 +137,31 @@ fn deleting_a_crate_leaves_every_track_in_the_library() {
 }
 
 #[test]
+fn a_track_id_that_is_no_longer_in_the_library_is_skipped_not_fatal() {
+    let h = Harness::new();
+    let id = user(&h, "Crate");
+    let one = h.add("/m/one.mp3");
+    let two = h.add("/m/two.mp3");
+
+    // The shape an agent produces: a list fetched a minute ago, one of whose
+    // rows has since been removed. `INSERT OR IGNORE` does not cover this —
+    // SQLite's conflict clause does not apply to FOREIGN KEY constraints — so
+    // before the `WHERE EXISTS` the unknown id aborted the statement and the
+    // transaction took the two good tracks down with it.
+    let added = h
+        .collections
+        .add_tracks(&id, &[one.clone(), "no-such-track".to_string(), two.clone()])
+        .expect("an unknown id must not fail the batch");
+
+    assert_eq!(added, 2, "both real tracks are filed");
+    assert_eq!(
+        h.collections.track_ids(&id).unwrap(),
+        vec![one, two],
+        "and in order, with no gap left by the one that was skipped"
+    );
+}
+
+#[test]
 fn the_count_beside_the_name_is_the_number_the_table_will_show() {
     let h = Harness::new();
     let id = user(&h, "Crate");
@@ -210,4 +235,65 @@ fn a_collection_scopes_the_library_query() {
         })
         .unwrap();
     assert_eq!(n, 1);
+}
+
+/// Two writers filing tracks at the same time must both succeed.
+///
+/// `add_tracks` reads `MAX(position)` and then inserts. Under
+/// `Connection::transaction()` — DEFERRED — that takes a read lock and then
+/// asks SQLite to upgrade it, and SQLite refuses the upgrade outright with
+/// `SQLITE_BUSY` when another connection has committed in between. The busy
+/// handler is deliberately not consulted for an upgrade, so `busy_timeout`
+/// does not cover it and no amount of waiting helps: six concurrent writers
+/// lost 7 of ~180 calls to `database is locked`.
+///
+/// This is not an MCP-only path. Filing tracks into a crate while the indexer
+/// writes is the same two connections doing the same thing.
+#[test]
+fn two_writers_filing_at_once_do_not_collide() {
+    use std::sync::Arc;
+    use std::thread;
+
+    let h = Harness::new();
+    let tracks: Vec<String> = (0..12).map(|i| h.add(&format!("/m/t{i}.mp3"))).collect();
+    let crates: Vec<String> = (0..4).map(|i| user(&h, &format!("Crate {i}"))).collect();
+
+    let collections = Arc::new(h.collections.clone());
+    let mut handles = Vec::new();
+    for (w, crate_id) in crates.iter().cloned().enumerate() {
+        let collections = collections.clone();
+        let tracks = tracks.clone();
+        handles.push(thread::spawn(move || {
+            let mut errors = Vec::new();
+            for round in 0..6 {
+                // Overlapping slices, so the writers contend rather than
+                // politely taking turns on separate rows.
+                let slice: Vec<String> = tracks
+                    .iter()
+                    .skip((w + round) % 4)
+                    .take(6)
+                    .cloned()
+                    .collect();
+                if let Err(e) = collections.add_tracks(&crate_id, &slice) {
+                    errors.push(e.to_string());
+                }
+                if let Err(e) = collections.remove_tracks(&crate_id, &slice) {
+                    errors.push(e.to_string());
+                }
+            }
+            errors
+        }));
+    }
+
+    let errors: Vec<String> = handles
+        .into_iter()
+        .flat_map(|h| h.join().expect("worker panicked"))
+        .collect();
+
+    assert!(
+        errors.is_empty(),
+        "concurrent writers must not fail; got {} errors, first: {:?}",
+        errors.len(),
+        errors.first()
+    );
 }

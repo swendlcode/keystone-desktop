@@ -39,7 +39,20 @@ pub fn add_tracks(ctx: &McpContext, args: &Value) -> Result<Value> {
     let id = str_arg(args, "collectionId")?;
     let ids = ids_arg(args, "trackIds")?;
     refuse_smart(ctx, &id, "added to")?;
-    Ok(json!({ "added": ctx.collections.add_tracks(&id, &ids)? }))
+
+    let added = ctx.collections.add_tracks(&id, &ids)?;
+    // `added` is lower than what was asked for when a track was already in the
+    // crate or is no longer in the library. Saying so is the difference
+    // between an agent reporting "filed 100" and "filed 98, two were gone".
+    let skipped = ids.len().saturating_sub(added);
+    let mut out = json!({ "added": added, "requested": ids.len() });
+    if skipped > 0 {
+        out["skipped"] = json!(skipped);
+        out["note"] = json!(
+            "skipped tracks were already in the collection, or are no longer in the library"
+        );
+    }
+    Ok(out)
 }
 
 pub fn remove_tracks(ctx: &McpContext, args: &Value) -> Result<Value> {
