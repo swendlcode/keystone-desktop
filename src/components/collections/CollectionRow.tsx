@@ -1,7 +1,6 @@
 import { useState, type DragEvent } from 'react';
-import { Flash, Trash } from '../ui/icons';
+import { Flash } from '../ui/icons';
 import { Input } from '../ui/Input';
-import { Tooltip } from '../ui/Tooltip';
 import { useCollectionStore } from '../../stores/collectionStore';
 import { formatCount } from '../../utils/formatters';
 import { COLLECTION_ID_MIME, hasType, readTrackDrag, TRACK_IDS_MIME } from './dragTypes';
@@ -12,9 +11,10 @@ interface CollectionRowProps {
   active: boolean;
   onSelect: () => void;
   onRename: (name: string) => void;
-  onDelete: () => void;
   onAddTracks: (trackIds: string[]) => void;
   onReorder: (draggedId: string, beforeId: string) => void;
+  /** Right-click. The panel owns the menu so only one can be open. */
+  onMenu: (x: number, y: number) => void;
 }
 
 /**
@@ -37,9 +37,9 @@ export function CollectionRow({
   active,
   onSelect,
   onRename,
-  onDelete,
   onAddTracks,
   onReorder,
+  onMenu,
 }: CollectionRowProps) {
   const renamingId = useCollectionStore((s) => s.renamingId);
   const smart = collection.kind === 'smart';
@@ -56,6 +56,10 @@ export function CollectionRow({
       onDragOver={drop.onDragOver}
       onDragLeave={drop.onDragLeave}
       onDrop={drop.onDrop}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onMenu(e.clientX, e.clientY);
+      }}
       className={`group/row flex items-center gap-2 rounded-md px-2.5 py-2 text-xs transition-colors ${
         drop.over === 'tracks'
           ? 'bg-keystone-lime/20 text-keystone-lime ring-1 ring-inset ring-keystone-lime/50'
@@ -72,19 +76,6 @@ export function CollectionRow({
         active={active}
         onSelect={onSelect}
       />
-
-      {!smart && (
-        <Tooltip label="Delete">
-          <button
-            type="button"
-            aria-label={`Delete ${collection.name}`}
-            onClick={onDelete}
-            className="flex h-5 w-5 items-center justify-center rounded text-gray-500 opacity-0 transition-opacity hover:text-red-400 group-hover/row:opacity-100"
-          >
-            <Trash size={12} color="currentColor" variant="Linear" />
-          </button>
-        </Tooltip>
-      )}
     </div>
   );
 }

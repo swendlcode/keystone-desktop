@@ -76,6 +76,7 @@ macro_rules! keystone_invoke_handler {
             $crate::commands::collection_commands::add_tracks_to_collection,
             $crate::commands::collection_commands::remove_tracks_from_collection,
             $crate::commands::collection_commands::reorder_collection_tracks,
+            $crate::commands::collection_commands::export_collection_csv,
             // tags
             $crate::commands::tag_commands::get_track_tags,
             $crate::commands::tag_commands::update_track_tags,

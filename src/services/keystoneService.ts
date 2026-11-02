@@ -211,6 +211,11 @@ export const keystoneService = {
   /** One collection's tracks, in the collection's own order when sorted by
       position. Separate from `searchTracks` because membership order is a join
       column, not a track column. */
+  /** Writes a collection out as a CSV. Returns how many rows it wrote. */
+  exportCollectionCsv(collectionId: string, destPath: string): Promise<number> {
+    return invoke('export_collection_csv', { collectionId, destPath });
+  },
+
   getCollectionPage(args: {
     collectionId: string;
     sort: TrackSort;

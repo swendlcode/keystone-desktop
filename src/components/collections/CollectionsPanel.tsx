@@ -1,11 +1,15 @@
 import { useState } from 'react';
-import { Add } from '../ui/icons';
+import { Add, MusicSquare } from '../ui/icons';
 import { ScrollArea } from '../ui/ScrollArea';
 import { ConfirmDialog } from '../settings/ConfirmDialog';
+import { Menu } from '../menu/Menu';
 import { CollectionRow } from './CollectionRow';
+import { collectionMenuItems } from './useCollectionMenu';
 import { NewCollectionField } from './NewCollectionField';
 import { useCollectionStore } from '../../stores/collectionStore';
 import { useLibraryStore } from '../../stores/libraryStore';
+import { useLibraryTotal } from '../../hooks/useLibrary';
+import { formatCount } from '../../utils/formatters';
 import {
   useAddToCollection,
   useCollections,
@@ -38,6 +42,10 @@ export function CollectionsPanel() {
   const addTracks = useAddToCollection();
 
   const [pendingDelete, setPendingDelete] = useState<Collection | null>(null);
+  // One menu at a time, owned here rather than per row.
+  const [menu, setMenu] = useState<{ x: number; y: number; collection: Collection } | null>(
+    null,
+  );
 
   /** Move `draggedId` to where `beforeId` sits and send the whole order. */
   const onReorder = (draggedId: string, beforeId: string) => {
@@ -55,6 +63,8 @@ export function CollectionsPanel() {
       {/* Ringed while a drag is in the air, so the destination is visible
           before the pointer reaches it rather than only once it is on top of
           a row. The drag worked before this; nothing on screen said so. */}
+      <AllTracksRow />
+
       <ScrollArea
         className={`min-h-0 flex-1 px-3 pb-3 transition-colors ${
           dragging ? 'rounded-md bg-keystone-lime/[0.06] ring-1 ring-inset ring-keystone-lime/40' : ''
@@ -76,13 +86,25 @@ export function CollectionsPanel() {
               active={selectedId === c.id}
               onSelect={() => selectCollection(selectedId === c.id ? null : c.id)}
               onRename={(name) => rename.mutate({ id: c.id, name })}
-              onDelete={() => setPendingDelete(c)}
               onAddTracks={(trackIds) => addTracks.mutate({ collectionId: c.id, trackIds })}
               onReorder={onReorder}
+              onMenu={(x, y) => setMenu({ x, y, collection: c })}
             />
           ))}
         </div>
       </ScrollArea>
+
+      {menu && (
+        <Menu
+          x={menu.x}
+          y={menu.y}
+          items={collectionMenuItems({
+            collection: menu.collection,
+            onDelete: () => setPendingDelete(menu.collection),
+          })}
+          onClose={() => setMenu(null)}
+        />
+      )}
 
       {pendingDelete && (
         <DeleteDialog
@@ -106,6 +128,63 @@ export function CollectionsPanel() {
  * which made the one action in this panel the quietest thing in it. Filled,
  * it is findable without hovering to see whether it lights up.
  */
+/**
+ * The way back to the whole library.
+ *
+ * There was none. Choosing a collection or a key narrowed the table, and
+ * getting back meant clicking the lit collection a second time, or finding
+ * the chip in the toolbar, or Clear all — three different gestures for one
+ * idea, none of them in the place the narrowing happened. A row at the top
+ * of the list, lit whenever nothing else is, says where you are as well as
+ * taking you there.
+ *
+ * Its count is the unfiltered total on purpose. A number that shrank as you
+ * filtered would be the one number on screen that cannot tell you how much
+ * there is to go back to.
+ */
+function AllTracksRow() {
+  const collectionId = useLibraryStore((s) => s.filters.collectionId);
+  const resetFilters = useLibraryStore((s) => s.resetFilters);
+  const selectCollection = useLibraryStore((s) => s.selectCollection);
+  const { data: total } = useLibraryTotal();
+
+  const active = collectionId == null;
+
+  return (
+    <div className="px-3 pt-1">
+      <button
+        type="button"
+        onClick={() => {
+          // Both, because "all tracks" has to mean all of them: leaving the
+          // key filter or a search in place would hand back a view that is
+          // still narrowed while claiming not to be.
+          selectCollection(null);
+          resetFilters();
+        }}
+        className={`group/row flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-xs transition-colors ${
+          active
+            ? 'bg-gray-700 text-keystone-white'
+            : 'text-gray-300 hover:bg-gray-800 hover:text-keystone-white'
+        }`}
+      >
+        <MusicSquare size={13} color="currentColor" variant="Linear" />
+        <span className="min-w-0 flex-1 truncate text-left font-medium">
+          All tracks
+        </span>
+        <span
+          className={`mono tnum shrink-0 rounded px-1.5 py-0.5 text-[11px] leading-none transition-colors ${
+            active
+              ? 'bg-keystone-lime text-[color:var(--color-on-accent)]'
+              : 'bg-gray-700 text-gray-300 group-hover/row:bg-gray-600 group-hover/row:text-keystone-white'
+          }`}
+        >
+          {total == null ? '—' : formatCount(total)}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 function PanelHeader({ onNew }: { onNew: () => void }) {
   const dragging = useCollectionStore((s) => s.draggingTracks);
   return (

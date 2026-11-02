@@ -5,6 +5,9 @@ import { keystoneService } from '../services/keystoneService';
 import { useLibraryStore } from '../stores/libraryStore';
 import { forgetTracks } from '../stores/playerStore';
 import {
+  DEFAULT_DIRECTION,
+  DEFAULT_FILTERS,
+  DEFAULT_SORT,
   KeystoneEvent,
   type KeyMode,
   type ScanProgressEvent,
@@ -47,6 +50,31 @@ export function useTracks(page = 0, pageSize = PAGE_SIZE) {
     // Keep the previous page on screen while the next one loads, so scrolling
     // a 20,000-row table does not blank between fetches.
     placeholderData: (prev) => prev,
+  });
+}
+
+/**
+ * How many tracks are in the library, ignoring every filter.
+ *
+ * Asked for one row and read the total off it: the backend counts the match
+ * anyway to build the page, so this is a COUNT and a single row rather than
+ * a second scan.
+ *
+ * Deliberately not the table's own total, which is the *filtered* count. The
+ * All Tracks row has to say how many there are to go back to, and a number
+ * that shrinks as you filter is the one number that cannot do that.
+ */
+export function useLibraryTotal() {
+  const query: TrackQuery = {
+    filters: DEFAULT_FILTERS,
+    sort: DEFAULT_SORT,
+    direction: DEFAULT_DIRECTION,
+    limit: 1,
+    offset: 0,
+  };
+  return useQuery({
+    queryKey: [...trackKeys.all, 'total'],
+    queryFn: () => keystoneService.searchTracks(query).then((p) => p.total),
   });
 }
 
