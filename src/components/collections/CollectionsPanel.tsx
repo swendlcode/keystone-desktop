@@ -68,7 +68,7 @@ export function CollectionsPanel() {
           </p>
         )}
 
-        <div className="mt-1.5 flex flex-col gap-0.5">
+        <div className="mt-1 flex flex-col gap-0.5">
           {collections.map((c) => (
             <CollectionRow
               key={c.id}
@@ -99,22 +99,30 @@ export function CollectionsPanel() {
   );
 }
 
+/**
+ * The section head: the word, and a filled + that reads as a button.
+ *
+ * The + used to be a bare glyph the same colour as the label beside it,
+ * which made the one action in this panel the quietest thing in it. Filled,
+ * it is findable without hovering to see whether it lights up.
+ */
 function PanelHeader({ onNew }: { onNew: () => void }) {
   const dragging = useCollectionStore((s) => s.draggingTracks);
   return (
-    <div className="flex items-center justify-between px-3 pt-2.5">
+    <div className="flex items-center justify-between px-3 pb-1 pt-3">
       <span className="label">
         {dragging
-          ? `Drop ${dragging} ${dragging === 1 ? 'track' : 'tracks'} on a collection`
+          ? `Drop ${dragging} ${dragging === 1 ? 'track' : 'tracks'} here`
           : 'Collections'}
       </span>
       <button
         type="button"
         aria-label="New collection"
+        title="New collection"
         onClick={onNew}
-        className="flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-800 hover:text-keystone-white"
+        className="flex h-5 w-5 items-center justify-center rounded bg-keystone-lime text-[color:var(--color-on-accent)] transition-colors hover:bg-[color:var(--color-accent-hover)]"
       >
-        <Add size={14} color="currentColor" variant="Linear" />
+        <Add size={13} color="currentColor" variant="Linear" />
       </button>
     </div>
   );

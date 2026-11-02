@@ -1,5 +1,5 @@
 import { useState, type DragEvent } from 'react';
-import { Flash, Music, Trash } from '../ui/icons';
+import { Flash, Trash } from '../ui/icons';
 import { Input } from '../ui/Input';
 import { Tooltip } from '../ui/Tooltip';
 import { useCollectionStore } from '../../stores/collectionStore';
@@ -20,9 +20,17 @@ interface CollectionRowProps {
 /**
  * One sidebar row: name, count, and both drop behaviours.
  *
- * Smart collections carry a different glyph and refuse track drops, because
- * their membership is a rule rather than rows — dropping onto one would appear
- * to work and then not.
+ * Smart collections carry a glyph and refuse track drops, because their
+ * membership is a rule rather than rows — dropping onto one would appear to
+ * work and then not. An ordinary collection carries none: an icon on every
+ * row is decoration, and once every row has one it stops marking the row
+ * that is different.
+ *
+ * The count is a filled pill rather than grey text. It is the only number in
+ * the sidebar and the thing the eye goes to when picking a crate, so it gets
+ * to be an object. The selected row takes a neutral highlight and lets the
+ * pill carry the accent — tinting the whole row accent as well left two
+ * things competing to say "this one".
  */
 export function CollectionRow({
   collection,
@@ -48,17 +56,22 @@ export function CollectionRow({
       onDragOver={drop.onDragOver}
       onDragLeave={drop.onDragLeave}
       onDrop={drop.onDrop}
-      className={`group/row flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors ${
+      className={`group/row flex items-center gap-2 rounded-md px-2.5 py-2 text-xs transition-colors ${
         drop.over === 'tracks'
-          ? 'bg-keystone-lime/20 text-keystone-lime'
+          ? 'bg-keystone-lime/20 text-keystone-lime ring-1 ring-inset ring-keystone-lime/50'
           : drop.over === 'order'
             ? 'bg-gray-700'
             : active
-              ? 'bg-keystone-lime/15 text-keystone-lime'
+              ? 'bg-gray-700 text-keystone-white'
               : 'text-gray-300 hover:bg-gray-800 hover:text-keystone-white'
       }`}
     >
-      <RowButton collection={collection} smart={smart} onSelect={onSelect} />
+      <RowButton
+        collection={collection}
+        smart={smart}
+        active={active}
+        onSelect={onSelect}
+      />
 
       {!smart && (
         <Tooltip label="Delete">
@@ -79,10 +92,12 @@ export function CollectionRow({
 function RowButton({
   collection,
   smart,
+  active,
   onSelect,
 }: {
   collection: Collection;
   smart: boolean;
+  active: boolean;
   onSelect: () => void;
 }) {
   const startRename = useCollectionStore((s) => s.startRename);
@@ -93,13 +108,17 @@ function RowButton({
       onDoubleClick={() => !smart && startRename(collection.id)}
       className="flex min-w-0 flex-1 items-center gap-2 text-left"
     >
-      {smart ? (
-        <Flash size={13} color="currentColor" variant="Linear" />
-      ) : (
-        <Music size={13} color="currentColor" variant="Linear" />
-      )}
-      <span className="min-w-0 flex-1 truncate">{collection.name}</span>
-      <span className="mono tnum text-[12px] text-gray-500">
+      {smart && <Flash size={13} color="currentColor" variant="Linear" />}
+      <span className="min-w-0 flex-1 truncate font-medium">
+        {collection.name}
+      </span>
+      <span
+        className={`mono tnum shrink-0 rounded px-1.5 py-0.5 text-[11px] leading-none transition-colors ${
+          active
+            ? 'bg-keystone-lime text-[color:var(--color-on-accent)]'
+            : 'bg-gray-700 text-gray-300 group-hover/row:bg-gray-600 group-hover/row:text-keystone-white'
+        }`}
+      >
         {formatCount(collection.trackCount)}
       </span>
     </button>
