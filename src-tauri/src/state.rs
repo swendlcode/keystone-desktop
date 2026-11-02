@@ -28,6 +28,10 @@ use jobs::AnalysisQueue;
 
 pub struct AppState {
     pub app: AppHandle,
+    /// The app's data directory. Held because the MCP bridge writes its
+    /// handshake beside the database, and deriving it from `settings_path`
+    /// at each use would be the same path spelled two ways.
+    pub data_dir: PathBuf,
     pub db: Arc<DatabasePool>,
     pub tracks: Arc<TrackRepository>,
     pub cues: Arc<CueRepository>,
@@ -76,6 +80,7 @@ impl AppState {
 
         Ok(Self {
             app,
+            data_dir: paths.data.clone(),
             db,
             tracks: repos.tracks,
             cues: repos.cues,

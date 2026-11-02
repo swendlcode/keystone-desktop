@@ -145,21 +145,30 @@ pub async fn reveal_in_finder(path: String) -> Result<()> {
 #[tauri::command]
 pub async fn export_file(id: String, dest_dir: String, state: State<'_, AppState>) -> Result<String> {
     let tracks = state.tracks.clone();
-    blocking(move || {
-        let track = tracks
-            .get_by_id(&id)?
-            .ok_or_else(|| KeystoneError::NotFound(format!("track {id}")))?;
-        let dest = PathBuf::from(&dest_dir).join(&track.filename);
-        if dest.exists() {
-            return Err(KeystoneError::Other(format!(
-                "{} already holds a file called {}",
-                dest_dir, track.filename
-            )));
-        }
-        std::fs::copy(&track.path, &dest)?;
-        Ok(dest.to_string_lossy().into_owned())
-    })
-    .await
+    blocking(move || copy_track_to(&tracks, &id, &dest_dir)).await
+}
+
+/// Copy one track's file into a directory, refusing to overwrite.
+///
+/// Extracted so the MCP server's `export_files` copies exactly what the
+/// window's Export Files does, including the refusal.
+pub(crate) fn copy_track_to(
+    tracks: &Arc<TrackRepository>,
+    id: &str,
+    dest_dir: &str,
+) -> Result<String> {
+    let track = tracks
+        .get_by_id(id)?
+        .ok_or_else(|| KeystoneError::NotFound(format!("track {id}")))?;
+    let dest = PathBuf::from(dest_dir).join(&track.filename);
+    if dest.exists() {
+        return Err(KeystoneError::Other(format!(
+            "{} already holds a file called {}",
+            dest_dir, track.filename
+        )));
+    }
+    std::fs::copy(&track.path, &dest)?;
+    Ok(dest.to_string_lossy().into_owned())
 }
 
 /// The preview is the undo. Renaming is the only irreversible operation in the

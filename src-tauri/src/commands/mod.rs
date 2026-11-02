@@ -10,7 +10,9 @@ pub mod library_commands;
 pub mod player_commands;
 pub mod settings_commands;
 pub mod tag_commands;
-mod tag_pass;
+// Visible to `crate::mcp`, which runs the same write pass the window does
+// rather than a second one that could drift from it.
+pub(crate) mod tag_pass;
 pub mod track_commands;
 pub mod update_commands;
 

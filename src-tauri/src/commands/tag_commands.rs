@@ -217,7 +217,7 @@ pub async fn restore_tag_backup(
 /// `previous` is the same composed string: re-tagging a library twice would
 /// otherwise produce `10A - 10A - Title`, and the marker a track carries is
 /// always the one its own key and energy compose.
-fn retag_edit(
+pub(crate) fn retag_edit(
     track: &Track,
     snapshot: &TagSnapshot,
     settings: &Settings,

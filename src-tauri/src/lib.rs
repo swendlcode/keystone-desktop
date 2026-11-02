@@ -1,4 +1,5 @@
 pub mod analysis;
+pub mod bridge;
 pub mod commands;
 pub mod core;
 pub mod db;
@@ -7,6 +8,7 @@ pub mod events;
 pub mod export;
 #[macro_use]
 pub mod handlers;
+pub mod mcp;
 pub mod models;
 pub mod state;
 pub mod tags;
@@ -45,12 +47,27 @@ pub fn run() {
             let state = AppState::init(app.handle().clone())?;
             recover_renames(&state);
             resume_work(&state);
+            // The agent-facing bridge. Loopback and token-guarded; failing to
+            // bind is logged and never stops the window from opening.
+            bridge::start(app.handle().clone(), state.data_dir.clone());
             app.manage(state);
             Ok(())
         })
         .invoke_handler(keystone_invoke_handler!())
-        .run(tauri::generate_context!())
-        .expect("error while running keystone");
+        .build(tauri::generate_context!())
+        .expect("error while building keystone")
+        // Built and then run, rather than `.run(context)`, only so there is
+        // somewhere to hook Exit: the MCP bridge's handshake names a port
+        // that stops answering when the app does, and leaving the token file
+        // behind would point the next `keystone-mcp` at a dead socket. The
+        // client probes anyway, so this is tidiness rather than correctness.
+        .run(|handle, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                if let Some(state) = handle.try_state::<AppState>() {
+                    bridge::stop(&state.data_dir);
+                }
+            }
+        });
 }
 
 /// Replays any rename journal left behind by a crash, before anything reads a

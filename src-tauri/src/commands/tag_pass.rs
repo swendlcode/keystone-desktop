@@ -28,7 +28,10 @@ const PAGE: usize = 5_000;
 
 pub struct TagPass {
     tracks: Arc<TrackRepository>,
-    app: AppHandle,
+    /// Absent when the pass is not running inside the app — the MCP server
+    /// with Keystone closed. There is no webview to send progress to then,
+    /// and the write itself does not depend on one.
+    app: Option<AppHandle>,
     run_id: String,
     /// Dry run by default at every call site: this writes to irreplaceable
     /// files, so the count is shown before anything is touched.
@@ -45,9 +48,19 @@ enum Outcome {
 
 impl TagPass {
     pub fn new(state: &AppState, dry_run: bool) -> Self {
+        Self::with_app(state.tracks.clone(), Some(state.app.clone()), dry_run)
+    }
+
+    /// The same pass, told explicitly whether anything is listening. `None`
+    /// is the MCP server running with the app closed.
+    pub fn with_app(
+        tracks: Arc<TrackRepository>,
+        app: Option<AppHandle>,
+        dry_run: bool,
+    ) -> Self {
         Self {
-            tracks: state.tracks.clone(),
-            app: state.app.clone(),
+            tracks,
+            app,
             run_id: uuid::Uuid::new_v4().to_string(),
             dry_run,
         }
@@ -123,7 +136,8 @@ impl TagPass {
         if done % EMIT_EVERY != 0 && done != total {
             return;
         }
-        let _ = self.app.emit(
+        let Some(app) = &self.app else { return };
+        let _ = app.emit(
             events::TAG_PROGRESS,
             FileProgressEvent {
                 run_id: self.run_id.clone(),

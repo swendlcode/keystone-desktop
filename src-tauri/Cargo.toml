@@ -94,6 +94,13 @@ filetime = "0.2.29"
 # --- export ------------------------------------------------------------------
 quick-xml = "0.42"
 
+# --- the agent bridge --------------------------------------------------------
+# Loopback HTTP, so `keystone-mcp` can route a call through the running app
+# and have the window see the change. 0.7 to match Stack, where the same
+# shape is already proven. The client side is plain `TcpStream` — see
+# `src/bin/mcp.rs` for why that does not want an HTTP client.
+axum = "0.7"
+
 # --- filesystem --------------------------------------------------------------
 notify = "6"
 notify-debouncer-full = "0.3"
@@ -127,3 +134,10 @@ harness = false
 name = "keystone-eval"
 path = "src/bin/eval.rs"
 required-features = ["eval"]
+
+# The MCP server. Ships with the app: it reuses the crate's own repositories
+# and tag-writing path, which is the reason it is a Rust binary here rather
+# than a separate Node package that would have to reimplement both.
+[[bin]]
+name = "keystone-mcp"
+path = "src/bin/mcp.rs"

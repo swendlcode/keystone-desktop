@@ -110,48 +110,54 @@ pub async fn export_collection_csv(
     state: State<'_, AppState>,
 ) -> Result<usize> {
     let tracks = state.tracks.clone();
+    blocking(move || write_collection_csv(&tracks, collection_id, &dest_path)).await
+}
 
-    blocking(move || {
-        let page = tracks.search(&crate::models::TrackQuery {
-            filters: crate::models::TrackFilters {
-                collection_id: Some(collection_id),
-                ..crate::models::TrackFilters::default()
-            },
-            sort: crate::models::TrackSort::Artist,
-            direction: crate::models::SortDirection::Asc,
-            // A collection is a crate, not a library; one query is enough and
-            // a cap keeps a mis-click from writing a hundred-megabyte file.
-            limit: 20_000,
-            offset: 0,
-        })?;
+/// The sheet itself, so the MCP server writes the same file this command does
+/// rather than a second CSV that drifts from it.
+pub(crate) fn write_collection_csv(
+    tracks: &std::sync::Arc<crate::db::TrackRepository>,
+    collection_id: String,
+    dest_path: &str,
+) -> Result<usize> {
+    let page = tracks.search(&crate::models::TrackQuery {
+        filters: crate::models::TrackFilters {
+            collection_id: Some(collection_id),
+            ..crate::models::TrackFilters::default()
+        },
+        sort: crate::models::TrackSort::Artist,
+        direction: crate::models::SortDirection::Asc,
+        // A collection is a crate, not a library; one query is enough and
+        // a cap keeps a mis-click from writing a hundred-megabyte file.
+        limit: 20_000,
+        offset: 0,
+    })?;
 
-        let mut csv = String::new();
-        // A byte order mark, so Excel on Windows reads UTF-8 rather than the
-        // system code page — without it every accented artist name arrives
-        // mangled, which is most of a house tracklist.
-        csv.push('\u{feff}');
-        csv.push_str("#,Artist,Title,Key,BPM,Energy,Genre,Path\r\n");
+    let mut csv = String::new();
+    // A byte order mark, so Excel on Windows reads UTF-8 rather than the
+    // system code page — without it every accented artist name arrives
+    // mangled, which is most of a house tracklist.
+    csv.push('\u{feff}');
+    csv.push_str("#,Artist,Title,Key,BPM,Energy,Genre,Path\r\n");
 
-        for (i, t) in page.tracks.iter().enumerate() {
-            let row = [
-                (i + 1).to_string(),
-                t.artist.clone().unwrap_or_default(),
-                t.title.clone().unwrap_or_else(|| t.filename.clone()),
-                t.camelot.clone().unwrap_or_default(),
-                t.tempo_display.map(|v| format!("{v:.2}")).unwrap_or_default(),
-                t.energy.map(|v| v.to_string()).unwrap_or_default(),
-                t.genre.clone().unwrap_or_default(),
-                t.path.clone(),
-            ];
-            let cells: Vec<String> = row.iter().map(|c| csv_cell(c)).collect();
-            csv.push_str(&cells.join(","));
-            csv.push_str("\r\n");
-        }
+    for (i, t) in page.tracks.iter().enumerate() {
+        let row = [
+            (i + 1).to_string(),
+            t.artist.clone().unwrap_or_default(),
+            t.title.clone().unwrap_or_else(|| t.filename.clone()),
+            t.camelot.clone().unwrap_or_default(),
+            t.tempo_display.map(|v| format!("{v:.2}")).unwrap_or_default(),
+            t.energy.map(|v| v.to_string()).unwrap_or_default(),
+            t.genre.clone().unwrap_or_default(),
+            t.path.clone(),
+        ];
+        let cells: Vec<String> = row.iter().map(|c| csv_cell(c)).collect();
+        csv.push_str(&cells.join(","));
+        csv.push_str("\r\n");
+    }
 
-        std::fs::write(&dest_path, csv)?;
-        Ok(page.tracks.len())
-    })
-    .await
+    std::fs::write(dest_path, csv)?;
+    Ok(page.tracks.len())
 }
 
 /// RFC 4180: a cell containing a comma, a quote or a newline is quoted, and

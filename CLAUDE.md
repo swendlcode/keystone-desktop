@@ -811,6 +811,64 @@ Brand source artwork lives in `../keystone-assets` and its README documents how 
 Tauri icon set was generated. The app's own inline marks are
 `src/assets/logo/*.svg` + `components/ui/LogoMark.tsx`.
 
+## MCP server (agent access)
+
+`keystone-mcp` is a third binary in the same crate (`src-tauri/src/bin/mcp.rs`)
+that exposes the library as MCP tools over stdio. Register it like any server:
+
+```json
+{ "mcpServers": { "keystone": { "command": "<path>/keystone-mcp" } } }
+```
+
+**Two transports, chosen per call, not at startup** — the user can open or quit
+Keystone mid-session and nothing restarts:
+
+1. **The running app**, via the loopback bridge (`src-tauri/src/bridge/`).
+   Writes land in the open window, because they go through the same commands
+   a click does and so produce the same query invalidations and progress
+   events. Writing straight to SQLite under an open window would leave the
+   user looking at a stale row with no way to know.
+2. **The database directly** (`McpContext::standalone`), when nothing answers
+   the probe. WAL plus the existing 10s `busy_timeout` makes this safe even if
+   the app opens mid-session.
+
+Both land in `mcp::dispatch` over an `McpContext`. **That is the whole point of
+the context**: the tools are written once against the repositories, and the
+only difference between transports is which context they get. Two dispatch
+tables would be two chances for the paths to disagree about what a tool does.
+
+- `McpContext::live` is `None` standalone. Tools needing the app — only
+  `analyze_tracks`, since the workers live in it — go through
+  `require_live()` and return a sentence saying to open the app, rather than
+  half-working.
+- The bridge binds `127.0.0.1` **and** requires a bearer token, written to
+  `<data>/mcp_bridge.json` at 0600. Loopback is not a permission boundary on
+  a shared machine and these tools move files. The comparison is
+  constant-time.
+- The handshake file is a **hint, not a promise**: the app can die without
+  removing it, so the client probes `/mcp/health` and falls back. `Exit`
+  removes it, which is why `run()` is `.build()` + `.run(|handle, event|)`.
+- The client side is a hand-written POST over `TcpStream`, not an HTTP crate.
+  It is loopback, the server is this same crate, and the response shape is
+  known, so TLS/redirects/chunking/pooling are all absent.
+- **Nothing but protocol may touch stdout.** `tracing` is pointed at stderr in
+  the binary; a stray `println!` in a tool corrupts the stream and the client
+  drops the connection with no useful error.
+- Tools are **coarser than the commands** they sit over. `rename_files` plans
+  *and* applies behind `dryRun`, because an agent has no modal to preview in.
+  `dryRun` defaults to **true** on everything that can touch more than one
+  file: a tool call is cheap and a model will make one to find out what would
+  happen, so the expensive direction has to be asked for.
+- A failed tool is a **result with `isError: true`**, not a JSON-RPC error — a
+  protocol error never reaches the model, and the sentence is the only thing
+  it has to correct itself with.
+- `list_tracks` returns a deliberate projection, not the whole `Track`. Sixty
+  fields times fifty rows is the agent's context spent on tuning cents.
+- Reuse, not reimplementation: `TagPass::with_app` takes an `Option<AppHandle>`
+  so the same write pass (backups, verification, per-file failures) runs
+  headless; `write_collection_csv` and `copy_track_to` were extracted from
+  their commands for the same reason.
+
 ## Known stubs / TODO
 
 Everything below is an explicit `todo!("owes: …")` in the tree, so a stub announces
