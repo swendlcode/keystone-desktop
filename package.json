@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "typecheck": "tsc --noEmit",
-    "check:colors": "node scripts/camelot-scale.mjs --verify"
+    "check:colors": "node scripts/camelot-scale.mjs --verify",
+    "mcp:sidecar": "node scripts/mcp-sidecar.mjs",
+    "bundle": "node scripts/mcp-sidecar.mjs --release && tauri build --config src-tauri/tauri.mcp.conf.json"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.56.0",

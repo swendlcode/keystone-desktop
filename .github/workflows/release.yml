@@ -15,10 +15,10 @@ jobs:
           # GitHub's macOS runners are arm64 only, so x86_64 is cross-compiled.
           - os: macos-latest
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
-            args: --target universal-apple-darwin
+            args: --target universal-apple-darwin --config src-tauri/tauri.mcp.conf.json
           - os: windows-latest
             rust-targets: ''
-            args: ''
+            args: --config src-tauri/tauri.mcp.conf.json
 
     runs-on: ${{ matrix.os }}
     permissions:
@@ -91,6 +91,25 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm install
+
+      # The MCP server, placed where the bundler looks for a sidecar.
+      #
+      # Deliberately its own step rather than a `beforeBuildCommand`. The
+      # build script reads `externalBin`, so a config carrying it makes the
+      # sidecar a prerequisite of compiling the crate *at all* — including of
+      # `cargo build --bin keystone-mcp`, which is how you build the sidecar.
+      # Keeping `externalBin` in `tauri.mcp.conf.json` and merging it with
+      # `--config` at bundle time breaks that circle, and leaves `tauri dev`
+      # exactly as it was.
+      #
+      # After `Set version from tag`, because the binary reports its own
+      # version from `CARGO_PKG_VERSION` and that step is what rewrites it.
+      #
+      # On macOS this builds both architectures and `lipo`s them: a
+      # `--target universal-apple-darwin` build asks for a sidecar named
+      # `-universal-apple-darwin` and nothing else produces one.
+      - name: Build the MCP sidecar
+        run: node scripts/mcp-sidecar.mjs --release
 
       - name: Build and upload to release
         uses: tauri-apps/tauri-action@v0

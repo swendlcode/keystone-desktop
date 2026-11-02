@@ -864,6 +864,41 @@ tables would be two chances for the paths to disagree about what a tool does.
   it has to correct itself with.
 - `list_tracks` returns a deliberate projection, not the whole `Track`. Sixty
   fields times fifty rows is the agent's context spent on tuning cents.
+### Shipping it: the sidecar
+
+The binary rides in the installers as a Tauri sidecar, landing at
+`Keystone.app/Contents/MacOS/keystone-mcp` (beside `keystone.exe` on Windows),
+which is the path a user registers.
+
+**`externalBin` is NOT in `tauri.conf.json`, and must not be put there.** The
+*build script* resolves it, not the bundler, so a config carrying it makes the
+sidecar a prerequisite of compiling the crate at all — which is circular,
+because `cargo build --bin keystone-mcp` is how the sidecar gets built:
+
+```
+error: failed to run custom build command for `keystone`
+  resource path `binaries/keystone-mcp-aarch64-apple-darwin` doesn't exist
+```
+
+That failure hits `tauri dev` just as hard as `tauri build`. So it lives in
+`src-tauri/tauri.mcp.conf.json` and is merged in at bundle time with
+`--config`, which leaves the dev loop untouched and costs it nothing.
+
+- `scripts/mcp-sidecar.mjs` builds it and names it the way Tauri expects
+  (`-$TARGET_TRIPLE`, plus `.exe` on Windows). Node rather than bash so the
+  Windows runner behaves the same.
+- **A universal macOS build asks for `keystone-mcp-universal-apple-darwin`**
+  and nothing produces that but `lipo`. On a macOS release the script writes
+  all three names — both architectures and the merged one — because the
+  sources disagree about whether the v2 CLI still merges sidecars itself, and
+  the release path is a bad place to find out.
+- The profile and `--target` are chosen to match what Tauri is about to do, so
+  the library compiles once rather than once per target layout.
+- `npm run bundle` does both halves locally. `src-tauri/binaries/` is
+  generated and gitignored.
+- Tauri strips the triple suffix when bundling, and signs the sidecar with the
+  bundle (ad-hoc, like the app).
+
 - Reuse, not reimplementation: `TagPass::with_app` takes an `Option<AppHandle>`
   so the same write pass (backups, verification, per-file failures) runs
   headless; `write_collection_csv` and `copy_track_to` were extracted from

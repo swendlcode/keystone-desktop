@@ -38,3 +38,6 @@ vite.config.d.ts
 # are the fallback, so a clean checkout still builds and looks finished.
 src/assets/brands/*.svg
 src/assets/brands/*.png
+
+# The MCP sidecar, built by scripts/mcp-sidecar.mjs on every dev and build.
+src-tauri/binaries/
