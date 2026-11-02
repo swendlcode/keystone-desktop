@@ -59,17 +59,27 @@ function hostTriple() {
 
 const exeSuffix = (triple) => (triple.includes('windows') ? '.exe' : '');
 
-/** Build for one triple, or for the host when `triple` is null. */
-function build(triple) {
+/**
+ * Build for one triple, or for the host when `target` is null.
+ *
+ * `named` is the triple the *filename* follows, which is not always `target`:
+ * a host build passes `null` as the target so the artifacts land in the plain
+ * `target/<profile>` directory and are shared with Tauri's own build, but the
+ * file is still called `…-x86_64-pc-windows-msvc.exe`. Deriving the extension
+ * from `process.platform` instead is what broke the Windows release job —
+ * `'win32'.includes('windows')` is false, so it looked for a source file with
+ * no `.exe` on it.
+ */
+function build(target, named) {
   const args = ['build', '--bin', BIN];
   if (release) args.push('--release');
-  if (triple) args.push('--target', triple);
+  if (target) args.push('--target', target);
   execFileSync('cargo', args, { cwd: tauriDir, stdio: 'inherit' });
 
-  const dir = triple
-    ? join(tauriDir, 'target', triple, profile)
+  const dir = target
+    ? join(tauriDir, 'target', target, profile)
     : join(tauriDir, 'target', profile);
-  return join(dir, BIN + exeSuffix(triple ?? process.platform));
+  return join(dir, BIN + exeSuffix(named));
 }
 
 function place(from, triple) {
@@ -86,7 +96,7 @@ if (release && process.platform === 'darwin') {
   const built = [];
   for (const triple of DARWIN_ARCHES) {
     try {
-      built.push([triple, build(triple)]);
+      built.push([triple, build(triple, triple)]);
     } catch (e) {
       // A machine without the cross target installed can still produce a
       // single-architecture build. The universal name is then missing, and
@@ -104,6 +114,25 @@ if (release && process.platform === 'darwin') {
     });
     chmodSync(universal, 0o755);
     console.log(`[mcp-sidecar] ${universal}`);
+
+    // And where the bundler actually reads it from.
+    //
+    // The build script resolves `externalBin` against `binaries/`, which is
+    // why the name above is needed and why a missing file fails compilation.
+    // The *bundler* does not: for `--target universal-apple-darwin` it copies
+    // the sidecar out of the target directory, and nothing puts it there —
+    //
+    //   failed to bundle project: Failed to copy binary from
+    //   "target/universal-apple-darwin/release/keystone-mcp": does not exist
+    //
+    // which is how a release job got all the way through two architectures
+    // before falling over. Both locations, so both stages are satisfied.
+    const targetDir = join(tauriDir, 'target', 'universal-apple-darwin', profile);
+    mkdirSync(targetDir, { recursive: true });
+    const resolved = join(targetDir, BIN);
+    copyFileSync(universal, resolved);
+    chmodSync(resolved, 0o755);
+    console.log(`[mcp-sidecar] ${resolved}`);
   } else {
     console.warn(
       '[mcp-sidecar] only one architecture built, so there is no universal sidecar; ' +
@@ -111,5 +140,6 @@ if (release && process.platform === 'darwin') {
     );
   }
 } else {
-  place(build(null), hostTriple());
+  const host = hostTriple();
+  place(build(null, host), host);
 }
