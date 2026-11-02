@@ -15,11 +15,10 @@ jobs:
           # GitHub's macOS runners are arm64 only, so x86_64 is cross-compiled.
           - os: macos-latest
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
-            args: --target universal-apple-darwin --config src-tauri/tauri.mcp.conf.json
+            args: --target universal-apple-darwin
           - os: windows-latest
             rust-targets: ''
-            args: --config src-tauri/tauri.mcp.conf.json
-
+            args: ''
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
@@ -92,24 +91,20 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
-      # The MCP server, placed where the bundler looks for a sidecar.
+      # A no-op except on a universal macOS build.
       #
-      # Deliberately its own step rather than a `beforeBuildCommand`. The
-      # build script reads `externalBin`, so a config carrying it makes the
-      # sidecar a prerequisite of compiling the crate *at all* — including of
-      # `cargo build --bin keystone-mcp`, which is how you build the sidecar.
-      # Keeping `externalBin` in `tauri.mcp.conf.json` and merging it with
-      # `--config` at bundle time breaks that circle, and leaves `tauri dev`
-      # exactly as it was.
+      # tauri-cli ships every `[[bin]]` in the crate, so the MCP server reaches
+      # the installers on its own and Windows needs nothing here. But a
+      # universal build lipos only the *main* binary into
+      # `target/universal-apple-darwin/release/` and then copies every crate
+      # bin out of that directory, so the extra one has to be merged in there
+      # first or bundling fails on a file that was never created.
       #
-      # After `Set version from tag`, because the binary reports its own
-      # version from `CARGO_PKG_VERSION` and that step is what rewrites it.
-      #
-      # On macOS this builds both architectures and `lipo`s them: a
-      # `--target universal-apple-darwin` build asks for a sidecar named
-      # `-universal-apple-darwin` and nothing else produces one.
-      - name: Build the MCP sidecar
-        run: node scripts/mcp-sidecar.mjs --release
+      # Deliberately NOT `externalBin`: declaring a crate bin as a sidecar
+      # installs it twice and the Windows installer refuses it with
+      # LGHT0204/ICE30 (tauri-apps/tauri#14681).
+      - name: Merge the MCP binary for the universal build
+        run: node scripts/universal-mcp-bin.mjs --release
 
       - name: Build and upload to release
         uses: tauri-apps/tauri-action@v0

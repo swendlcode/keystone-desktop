@@ -1,7 +1,7 @@
 {
   "name": "keystone",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,9 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "typecheck": "tsc --noEmit",
-    "check:colors": "node scripts/camelot-scale.mjs --verify",
-    "mcp:sidecar": "node scripts/mcp-sidecar.mjs",
-    "bundle": "node scripts/mcp-sidecar.mjs --release && tauri build --config src-tauri/tauri.mcp.conf.json"
+    "check:colors": "node scripts/camelot-scale.mjs --verify"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.56.0",

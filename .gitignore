@@ -39,5 +39,3 @@ vite.config.d.ts
 src/assets/brands/*.svg
 src/assets/brands/*.png
 
-# The MCP sidecar, built by scripts/mcp-sidecar.mjs on every dev and build.
-src-tauri/binaries/

@@ -1,6 +1,6 @@
 [package]
 name = "keystone"
-version = "0.1.2"
+version = "0.1.3"
 description = "Harmonic-mixing analysis for DJ libraries"
 authors = ["Swendl"]
 edition = "2021"
