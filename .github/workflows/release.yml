@@ -38,10 +38,22 @@ jobs:
         with:
           targets: ${{ matrix.rust-targets }}
 
-      - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri -> target
+      # No cache on a release build, deliberately.
+      #
+      # A cached `target/` carried artifacts from a previous build whose
+      # dependency set no longer existed. Making `ort` optional removed the
+      # ONNX runtime, but the restored directory still had the bundler
+      # expecting its DLLs beside the binary:
+      #
+      #   light.exe : error LGHT0001 : Could not find a part of the path
+      #               '...\target\release\DirectML.dll'
+      #
+      # So the macOS job built clean and Windows failed on a file that no
+      # longer belongs to this project. A release is the one build that has
+      # to be reproducible from nothing: it is cut rarely, it is the artifact
+      # strangers run, and ten minutes of cache is not worth an installer
+      # assembled partly out of a previous commit. CI for pull requests can
+      # keep its cache.
 
       # The tag is the single source of truth for the version. Both files are
       # rewritten here rather than kept in sync by hand, because a Cargo.toml
