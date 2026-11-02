@@ -20,10 +20,28 @@ default = []
 # The GiantSteps+ / MIREX scoring harness. Dev-only: it reads a corpus from
 # disk and must never be part of a shipped bundle.
 eval = []
+# ONNX Runtime, for the two inference paths that are still unwritten: the
+# SKey voter and Beat This!.
+#
+# Off by default, and that is load-bearing rather than tidy. `ort` ships no
+# prebuilt binary for x86_64-apple-darwin, so a universal macOS build — which
+# cross-compiles both architectures and lipos them together — fails outright
+# on the Intel half:
+#
+#   error: ort-sys@2.0.0-rc.15: no prebuilt binaries available for
+#          target x86_64-apple-darwin
+#
+# That took the entire macOS release job down while the Windows one shipped,
+# leaving a half-published release. Nothing calls into `ort` yet — it appears
+# in this crate only inside `todo!()` strings in `analysis/key/skey.rs` — so
+# until one of those paths is written, the dependency bought a broken build
+# and nothing else. Turn it on with `--features onnx` when there is code
+# behind it, and solve the Intel question then.
+onnx = ["dep:ort"]
 # Beat This! is behind a gate because the fp32 ONNX export is 190 MB and the
 # classical S8 phase may already agree with it on >90% of tracks. ENGINE.md §2
 # says measure before bundling.
-beat-this = []
+beat-this = ["onnx"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -61,7 +79,10 @@ ebur128 = "0.1.11"
 # Release candidate with an ABI pinned to one ONNX Runtime build, so the version
 # is exact with no caret. On Windows the DLLs ship beside the binary: a stale
 # system onnxruntime.dll would otherwise shadow the bundled one.
-ort = "=2.0.0-rc.15"
+#
+# Optional: see the `onnx` feature above for why a shipped build must not pull
+# this in.
+ort = { version = "=2.0.0-rc.15", optional = true }
 
 # --- tags --------------------------------------------------------------------
 # Never round-trip through lofty's generic `Tag`: its own docs say conversion
