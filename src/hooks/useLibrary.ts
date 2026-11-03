@@ -147,6 +147,89 @@ export function useRemoveFolder() {
   });
 }
 
+/**
+ * Walk a folder again, picking up anything added or changed outside the app.
+ *
+ * The same command ADD TRACKS runs. Re-running it on a folder already watched
+ * is the supported way to notice new files: the walk skips a path whose mtime
+ * has not moved, so a re-scan over a large library is cheap and is not a
+ * re-analysis.
+ */
+export function useRescanFolder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (path: string) => keystoneService.scanFolder(path),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: folderKeys.all });
+      qc.invalidateQueries({ queryKey: trackKeys.all });
+    },
+  });
+}
+
+/** Stop the walk at the next file. Rows already written stay. */
+export function useCancelScan() {
+  return useMutation({ mutationFn: () => keystoneService.cancelScan() });
+}
+
+/**
+ * The startup diff, on demand: touch what is still there, mark what is not.
+ *
+ * This is the answer to "a track moved or its drive is unmounted". It only
+ * ever changes `index_status` and `last_seen_at` — nothing is deleted — so it
+ * is safe to run at any time and is not behind a confirmation.
+ */
+export function useReconcile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => keystoneService.runReconciliation(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: trackKeys.all });
+      qc.invalidateQueries({ queryKey: folderKeys.all });
+    },
+  });
+}
+
+/**
+ * Drop the rows reconciliation marked missing, and the analysis and peak
+ * files behind them.
+ *
+ * Destructive in a way reconciliation is not: a track removed here loses its
+ * cue points, its overrides and its rating along with the row. A drive that
+ * was merely unplugged comes back by plugging it in and reconciling; cleaning
+ * the cache first turns that into a re-import.
+ */
+export function useCleanCache() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => keystoneService.cleanCache(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: trackKeys.all });
+      qc.invalidateQueries({ queryKey: folderKeys.all });
+    },
+  });
+}
+
+/**
+ * The walk's state, fetched once rather than waited for.
+ *
+ * `useLibrarySync` keeps `libraryStore.scanProgress` current from
+ * `keystone://scan-progress`, but a pane opened *during* a scan has whatever
+ * the last event left and nothing until the next one. This seeds it.
+ */
+export function useScanProgressOnce() {
+  const setScanProgress = useLibraryStore((s) => s.setScanProgress);
+  return useQuery({
+    queryKey: [...folderKeys.all, 'scan-progress'],
+    queryFn: async () => {
+      const progress = await keystoneService.getScanProgress();
+      if (progress.isScanning) setScanProgress(progress);
+      return progress;
+    },
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+}
+
 export function useSetRating() {
   const qc = useQueryClient();
   return useMutation({

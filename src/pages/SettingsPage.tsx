@@ -4,6 +4,7 @@ import { DisplayOptionsPane } from '../components/settings/DisplayOptionsPane';
 import { ExportCuePointsPane } from '../components/settings/ExportCuePointsPane';
 import { FeedbackPane } from '../components/settings/FeedbackPane';
 import { KeyNotationPane } from '../components/settings/KeyNotationPane';
+import { LibraryPane } from '../components/settings/LibraryPane';
 import { PersonalizePane } from '../components/settings/PersonalizePane';
 import { RenameFilesPane } from '../components/settings/RenameFilesPane';
 import { SettingsRail } from '../components/settings/SettingsRail';
@@ -47,6 +48,8 @@ export function SettingsPage() {
               {section === 'displayOptions' && <DisplayOptionsPane settings={settings} />}
             </>
           )}
+          {/* Needs no `settings`: it reads the library, not the preferences. */}
+          {section === 'library' && <LibraryPane />}
           {section === 'feedback' && <FeedbackPane />}
           {section === 'about' && <AboutPane />}
         </div>

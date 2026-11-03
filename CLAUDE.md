@@ -986,14 +986,40 @@ that in a second.
   was missing. This is the list worth reading.
 
 It is a report, not a gate — it exits 0 and some of what it lists is
-deliberate. As of this writing it flags ten service methods, and they are
-*features that were never built*, not bugs: `scanFolder`, `cancelScan`,
-`getScanProgress`, `runReconciliation`, `cleanCache` and `getLibraryFolders`
-are a whole library-maintenance pane that does not exist — tracks go in
-through ADD TRACKS and there is no way to re-scan, reconcile or see the
-watched folders. `setCollectionColor` and `reorderCollectionTracks` are
-collection features with backends and no controls. `getBeatgrid` would draw
-beat markers. `getTracks` is superseded by `searchTracks`' paging.
+deliberate. Five remain, and they are *features that were never built*, not
+bugs: `setCollectionColor` and `reorderCollectionTracks` are collection
+features with backends and no controls, `getBeatgrid` would draw beat markers,
+and `getLibraryFolders` and `getTracks` are now genuinely superseded — by the
+Library pane's watched-folder list and by `searchTracks`' paging.
+
+`getLibraryFolders` was deliberately *not* forced into the Library pane to get
+it off this list. It returns every folder that contains a track, which on a
+real library is hundreds of subfolders; the watched roots are what a
+maintenance pane is about. Inventing a feature to justify a function is how
+the backlog this script exists to find got here.
+
+### Settings -> Library
+
+The pane that made six of those reachable. It exists because the commands
+behind it were not: `scan_folder`, `cancel_scan`, `get_scan_progress`,
+`run_reconciliation` and `clean_cache` were registered, exposed through
+`keystoneService` and called by nothing. Tracks went in through ADD TRACKS,
+there was no way to re-scan after adding files outside the app, no way to see
+the watched folders, and **no recovery at all for a track whose file had
+moved** — the row simply stopped working.
+
+**The two maintenance actions are not alike and the copy must keep saying so.**
+Reconciling only ever writes `index_status` and `last_seen_at`, so it deletes
+nothing and sits behind no confirmation. Cleaning the cache removes the rows
+reconciliation marked missing, and a row carries that track's cue points,
+overrides and rating with it — so a drive that was merely unplugged, cleaned
+away, becomes a re-import rather than a reconnect. That is the failure the
+warning text is there to prevent, and it is the reason the two are separate
+buttons in separate groups rather than one "fix my library".
+
+`skipped` is shown as "unchanged" rather than beside `failed`: the walk skips
+a path whose mtime has not moved, so on a re-scan almost everything is
+skipped and that is the feature working.
 
 Two were removed rather than listed for ever:
 

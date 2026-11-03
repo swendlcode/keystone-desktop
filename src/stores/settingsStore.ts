@@ -33,6 +33,7 @@ export function applyTheme(theme: Theme): void {
 /** The left rail of SPEC.md §3, in order. */
 export type SettingsSection =
   | 'personalize'
+  | 'library'
   | 'feedback'
   | 'updateTags'
   | 'exportCuePoints'
@@ -45,6 +46,9 @@ export type SettingsSection =
 
 export const SETTINGS_SECTIONS: Array<{ id: SettingsSection; label: string }> = [
   { id: 'personalize', label: 'Personalize' },
+  // Second, above the panes that write to files: it is about what is *in* the
+  // library, which is the question a user has before any of those.
+  { id: 'library', label: 'Library' },
   { id: 'feedback', label: 'Send Feedback' },
   { id: 'updateTags', label: 'Update Tags' },
   { id: 'exportCuePoints', label: 'Export Cue Points' },
