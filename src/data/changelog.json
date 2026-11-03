@@ -1,4 +1,16 @@
 {
+  "0.1.4": {
+    "date": "2026-11-03",
+    "title": "Your folders, your cue counts, and markers you can read",
+    "summary": "A new Library pane for the folders Keystone watches, a way back when a file moves, and cue markers that no longer print on top of each other.",
+    "highlights": [
+      "Settings now has a Library pane: see the folders Keystone watches, re-scan one after adding files outside the app, and remove one you no longer want.",
+      "When a track's file moves or its drive is unplugged, Check for missing files finds it. Nothing is deleted — cleaning up is a separate, clearly-marked step.",
+      "Cue markers that sit close together stack onto separate rows instead of printing over each other.",
+      "The CUES column shows how many cue points each track has, instead of a dash on every row.",
+      "Play counts are counted."
+    ]
+  },
   "0.1.3": {
     "date": "2026-11-02",
     "title": "Drag that lands, tempo you can correct, and in-app updates",
