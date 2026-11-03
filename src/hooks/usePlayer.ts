@@ -199,7 +199,22 @@ export function usePlayer() {
         // track already loaded it restarts the *previous* one. Reading the
         // flag from the store rather than from the closure keeps the answer
         // current: the user may have hit pause while the path was in flight.
-        if (usePlayerStore.getState().isPlaying) void beginPlayback(el2);
+        if (usePlayerStore.getState().isPlaying) {
+          void beginPlayback(el2);
+          // `play_count` was a column, a command, a service method and a field
+          // on `Track` that nothing ever incremented, so it read 0 for every
+          // track for ever — including over MCP, where `get_track` hands it to
+          // an agent as though it meant something. Counted here rather than in
+          // the store's `play()` because this is the point a source actually
+          // exists and starts: `play()` also fires for a track whose path is
+          // still in flight and for one that turns out to be unreadable.
+          //
+          // Fire and forget. A failed count must not interrupt playback, and
+          // there is nothing useful to tell the user about it.
+          void keystoneService
+            .incrementPlayCount(currentTrack.id)
+            .catch(() => {});
+        }
       })
       .catch((e) => {
         usePlayerStore

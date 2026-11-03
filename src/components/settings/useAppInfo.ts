@@ -33,12 +33,16 @@ export function openExternal(url: string): void {
 /**
  * CHECK FOR UPDATES, against the signed manifest.
  *
- * This goes to `tauri-plugin-updater` rather than to the backend's
- * `check_for_update`, which is a legacy version ping that always answers "no
- * update" by design — the crate has no HTTP client, because a second, unsigned
- * path to "is there a newer build" would be a download with none of the
- * signature checking that makes the real one safe. A button wired to the ping
- * would say "You are up to date" to a user on a year-old build.
+ * This goes to `tauri-plugin-updater`, which fetches and verifies a signed
+ * `latest.json`. There is deliberately no HTTP client in the crate: a second,
+ * unsigned path to "is there a newer build" would be a download with none of
+ * the signature checking that makes the real one safe.
+ *
+ * A backend `check_for_update` used to sit beside this, hardcoded to answer
+ * "no update available". It was registered, exposed through the service layer
+ * and called by nothing — which is the only reason it never said "You are up
+ * to date" to someone on a year-old build. Removed rather than left as a
+ * trap.
  */
 export function useUpdateCheck() {
   const [state, setState] = useState<UpdateCheck>({ status: 'idle' });

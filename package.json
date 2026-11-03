@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "typecheck": "tsc --noEmit",
-    "check:colors": "node scripts/camelot-scale.mjs --verify"
+    "check:colors": "node scripts/camelot-scale.mjs --verify",
+    "dead-paths": "python3 scripts/dead-paths.py"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.56.0",

@@ -7,7 +7,6 @@ export * from './collection';
 export * from './tags';
 export * from './settings';
 export * from './export';
-export * from './update';
 export * from './player';
 export * from './ipc';
 export * from './import';

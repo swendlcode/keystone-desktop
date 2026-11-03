@@ -104,7 +104,6 @@ macro_rules! keystone_invoke_handler {
             $crate::commands::settings_commands::update_settings,
             $crate::commands::settings_commands::refold_tempo_display,
             // updater
-            $crate::commands::update_commands::check_for_update,
         ]
     };
 }

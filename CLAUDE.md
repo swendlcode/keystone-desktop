@@ -972,7 +972,41 @@ now fetches one query per loaded page, never per row, and the count reaches
 `TrackRow` as a plain number so its memo still compares equal.
 
 **Four is a pattern, not a coincidence.** Before adding a command, check
-whether the thing it is for already has one.
+whether the thing it is for already has one — `npm run dead-paths` answers
+that in a second.
+
+### `npm run dead-paths`
+
+`scripts/dead-paths.py` reports two different failures:
+
+- **A registered command with no `invoke('name')` anywhere.** Unreachable from
+  the UI. There are currently none; the four above were the last of them.
+- **A service method that calls `invoke` but has nothing calling it.** The
+  shape that hid all four: the IPC existed end to end and only the last link
+  was missing. This is the list worth reading.
+
+It is a report, not a gate — it exits 0 and some of what it lists is
+deliberate. As of this writing it flags ten service methods, and they are
+*features that were never built*, not bugs: `scanFolder`, `cancelScan`,
+`getScanProgress`, `runReconciliation`, `cleanCache` and `getLibraryFolders`
+are a whole library-maintenance pane that does not exist — tracks go in
+through ADD TRACKS and there is no way to re-scan, reconcile or see the
+watched folders. `setCollectionColor` and `reorderCollectionTracks` are
+collection features with backends and no controls. `getBeatgrid` would draw
+beat markers. `getTracks` is superseded by `searchTracks`' paging.
+
+Two were removed rather than listed for ever:
+
+- **`increment_play_count` is now called**, from `usePlayer` at the point a
+  source actually starts. `play_count` was a column, a command, a service
+  method and a field on `Track` that nothing incremented, so it read 0 for
+  every track for ever — including over MCP, where `get_track` hands it to an
+  agent as though it meant something.
+- **`check_for_update` is gone.** It was hardcoded to answer "no update
+  available" and the real updater is `tauri-plugin-updater`. Registered,
+  exposed through the service layer, called by nothing — which is the only
+  reason it never told someone on a year-old build they were up to date. A
+  stub that lies is worse than no stub.
 
 ## MCP server (agent access)
 

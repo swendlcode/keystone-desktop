@@ -33,7 +33,6 @@ import type {
   TrackQuery,
   TrackRegion,
   TrackSort,
-  UpdateInfo,
   WatchedFolder,
   Waveform,
   WheelCounts,
@@ -472,9 +471,6 @@ export const keystoneService = {
     return invoke('refold_tempo_display');
   },
 
-  checkForUpdate(): Promise<UpdateInfo> {
-    return invoke('check_for_update');
-  },
 };
 
 /** Webview-loadable URL for a file on disk. A bare `file://` will not load. */

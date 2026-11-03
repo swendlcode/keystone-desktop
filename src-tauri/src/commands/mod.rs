@@ -14,7 +14,6 @@ pub mod tag_commands;
 // rather than a second one that could drift from it.
 pub(crate) mod tag_pass;
 pub mod track_commands;
-pub mod update_commands;
 
 use crate::error::{KeystoneError, Result};
 
