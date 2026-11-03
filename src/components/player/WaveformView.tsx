@@ -216,6 +216,7 @@ export function WaveformView({ track, onSeek }: WaveformViewProps) {
         cues={visibleCues}
         window={win}
         containerRef={boxRef}
+        widthPx={size.width}
         onSeek={onSeek}
         onContextMenu={(e, cue) => openMenu(e, cue)}
       />

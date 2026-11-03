@@ -10,12 +10,33 @@ interface CueMarkersProps {
   window: WaveWindow;
   /** The element the markers are positioned inside. Measured on each drag. */
   containerRef: RefObject<HTMLDivElement>;
+  /** The waveform's pixel width, already measured by the parent's
+      ResizeObserver. Needed to tell whether two flags would overlap, which is
+      a question about pixels and not about time. */
+  widthPx: number;
   onSeek: (seconds: number) => void;
   onContextMenu: (e: React.MouseEvent, cue: CuePoint) => void;
 }
 
 /** Below this, a pointerup is a click to jump rather than the end of a drag. */
 const DRAG_SLOP_PX = 3;
+
+/**
+ * Roughly how wide a flag is: the dot, `CUE 8`, padding either side.
+ *
+ * An estimate rather than a measurement on purpose. Measuring would mean
+ * rendering every flag, reading its box and re-rendering with the result —
+ * two passes per frame while panning, to decide something that only has to be
+ * approximately right. Over-estimating costs a lane that was not strictly
+ * needed; under-estimating lets two labels touch, which is the bug.
+ */
+const FLAG_WIDTH_PX = 58;
+/** Lane height: the flag's own 17px plus a hairline of air. */
+const LANE_PX = 19;
+/** How many lanes before flags start again at the top. Eight cues never need
+    more than this in practice, and a flag pushed too far down leaves the
+    waveform. */
+const MAX_LANES = 3;
 
 /**
  * CUE 1..8, drawn on the waveform as flags.
@@ -47,6 +68,7 @@ export function CueMarkers({
   cues,
   window: win,
   containerRef,
+  widthPx,
   onSeek,
   onContextMenu,
 }: CueMarkersProps) {
@@ -101,6 +123,46 @@ export function CueMarkers({
     if (ms != null) move.mutate({ id: cue.id, positionMs: ms });
   };
 
+  // Which lane each flag sits in, so two cues close together stack instead of
+  // printing over each other.
+  //
+  // Cues are not laid out in slot order — they are wherever the track puts
+  // them — so this works over a copy sorted by position. Greedy first-fit:
+  // walk left to right and drop each flag in the topmost lane whose last flag
+  // has already ended. That is enough because the flags are all the same
+  // height and are processed in order of their left edge.
+  const laneOf = new Map<string, number>();
+  {
+    // In fractions, because that is what the flags are positioned in.
+    const flagFrac = widthPx > 0 ? FLAG_WIDTH_PX / widthPx : 0;
+
+    const placed = cues
+      .map((cue) => {
+        const ms = preview?.slot === cue.slot ? preview.ms : cue.positionMs;
+        const frac = (ms / 1000 - win.startS) / spanS;
+        // A flag near the right edge folds to the left of its line, so the
+        // span it occupies is on the other side. Same test as `flagLeft`.
+        const left = frac > 0.94 ? frac - flagFrac : frac;
+        return { id: cue.id, left };
+      })
+      // By left edge, not by position: first-fit only gives the topmost free
+      // lane if the flags arrive in the order their boxes start, and a folded
+      // flag starts a whole box earlier than its line.
+      .sort((a, b) => a.left - b.left);
+
+    // The right edge of the last flag placed in each lane.
+    const laneEnds: number[] = [];
+
+    for (const { id, left } of placed) {
+      let lane = laneEnds.findIndex((end) => end <= left);
+      if (lane === -1) {
+        lane = laneEnds.length < MAX_LANES ? laneEnds.length : 0;
+      }
+      laneEnds[lane] = left + flagFrac;
+      laneOf.set(id, lane);
+    }
+  }
+
   return (
     <>
       {cues.map((cue) => {
@@ -146,7 +208,8 @@ export function CueMarkers({
               }`}
             />
             <span
-              className={`mono absolute top-0 flex h-[17px] items-center gap-1 whitespace-nowrap rounded-sm bg-gray-700/95 px-1.5 text-[10px] font-medium tracking-wide text-keystone-white shadow-sm ${
+              style={{ top: (laneOf.get(cue.id) ?? 0) * LANE_PX }}
+              className={`mono absolute flex h-[17px] items-center gap-1 whitespace-nowrap rounded-sm bg-gray-700/95 px-1.5 text-[10px] font-medium tracking-wide text-keystone-white shadow-sm ${
                 flagLeft ? 'right-1/2' : 'left-1/2'
               } ${dragging ? 'bg-gray-600' : 'hover:bg-gray-600'}`}
             >

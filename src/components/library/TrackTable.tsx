@@ -7,6 +7,7 @@ import { TrackTableHeader } from './TrackTableHeader';
 import { ROW_HEIGHT, gridTemplate, visibleColumns } from './columns';
 import { useRowInteraction } from './useRowInteraction';
 import type { TrackWindow } from './useTrackWindow';
+import { useCueCounts } from '../../hooks/useCues';
 import { useSelectAll } from '../../hooks/useKeyboard';
 import { PAGE_SIZE, useSetRating } from '../../hooks/useLibrary';
 import { useEffectiveSettings } from '../../hooks/useSettings';
@@ -38,7 +39,10 @@ export function TrackTable({ window: win, onPageChange }: TrackTableProps) {
   const playingId = usePlayerStore((s) => s.currentTrack?.id ?? null);
 
   const rows = useRowInteraction(win);
-  useSelectAll(useMemo(() => win.loaded.map((t) => t.id), [win.loaded]));
+  const loadedIds = useMemo(() => win.loaded.map((t) => t.id), [win.loaded]);
+  useSelectAll(loadedIds);
+  // One query per loaded window, not one per row: see `useCueCounts`.
+  const { data: cueCounts } = useCueCounts(loadedIds);
 
   const columnOrder = useUiStore((s) => s.columnOrder);
   const columns = useMemo(
@@ -110,6 +114,13 @@ export function TrackTable({ window: win, onPageChange }: TrackTableProps) {
                     notation={settings?.keyNotation ?? 'camelot'}
                     pad={settings?.padCamelotNumbers ?? false}
                     decimals={settings?.tempoDecimals ?? 0}
+                    // A number rather than the Map, so `TrackRow`'s memo still
+                    // compares equal between renders.
+                    cueCount={
+                      track == null || cueCounts == null
+                        ? null
+                        : (cueCounts.get(track.id) ?? 0)
+                    }
                     onRowMouseDown={rows.onRowMouseDown}
                     onRowDoubleClick={rows.onRowDoubleClick}
                     onRowPointerDown={rows.onRowPointerDown}

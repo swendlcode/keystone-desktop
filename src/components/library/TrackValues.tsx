@@ -82,20 +82,25 @@ export function EnergyValue({ track }: { track: Track }) {
 /**
  * How many of the eight cue slots are filled.
  *
- * `tracks` does not carry this yet, so the read is defensive: `TrackSort`
- * already offers `cuePointCount`, which means the backend sorts by a number
- * the read model does not return. Until the column lands this cell says
- * nothing rather than guessing — counting per row would be one query per
- * visible row, and inferring it from `analyzedAt` would be an invented number
- * in a column a DJ exports from.
+ * The count arrives as a prop, fetched once per loaded page by
+ * `useCueCounts`, rather than being read off the track. `tracks` does not
+ * carry it — `TrackSort` offers `cuePointCount` and the read model does not
+ * return it — and the earlier version looked for a field that was never
+ * there, so every row showed `--` while the player bar showed eight markers
+ * for the same track. A column that says "none" everywhere is worse than one
+ * that says nothing.
+ *
+ * `null` is still "not known yet", which is what the first frame of a new
+ * page shows. Zero is a real zero and is dimmed rather than hidden, because
+ * "this track has no cues" is the thing a DJ is scanning the column for.
  */
-export function cueCountOf(track: Track): number | null {
-  const v = (track as Track & { cuePointCount?: number | null }).cuePointCount;
-  return typeof v === 'number' ? v : null;
-}
-
-export function CueCountValue({ track }: { track: Track }) {
-  const count = cueCountOf(track);
+export function CueCountValue({
+  track,
+  count,
+}: {
+  track: Track;
+  count: number | null;
+}) {
   if (count == null) return <PendingValue track={track} />;
 
   return (

@@ -12,6 +12,8 @@ interface TrackRowProps extends CellFormat {
   gridTemplate: string;
   selected: boolean;
   playing: boolean;
+  /** Filled cue slots, or null while the page's counts are in flight. */
+  cueCount: number | null;
   onRowMouseDown: (e: React.MouseEvent, index: number) => void;
   onRowDoubleClick: (index: number) => void;
   onRowPointerDown: (e: React.PointerEvent, index: number) => void;
@@ -36,6 +38,7 @@ export const TrackRow = memo(function TrackRow({
   gridTemplate,
   selected,
   playing,
+  cueCount,
   notation,
   pad,
   decimals,
@@ -77,6 +80,7 @@ export const TrackRow = memo(function TrackRow({
           <TrackCell
             column={column}
             track={track}
+            cueCount={cueCount}
             notation={notation}
             pad={pad}
             decimals={decimals}

@@ -161,6 +161,29 @@ src-tauri/              Rust backend
     commands/           Thin Tauri handlers, one file per domain
 ```
 
+## Cue flags are laid out in lanes
+
+`CueMarkers` assigns each flag a lane and offsets it by `LANE_PX`, because two
+cues close together printed their labels on top of each other — a flag at the
+right edge rendered as `CUE 7 3`, which is `CUE 7` and `CUE 3` overprinted.
+Exactly when you need to tell two nearby cues apart, neither was readable.
+
+Greedy first-fit, and two things about it are load-bearing:
+
+- **Sorted by left edge, not by cue position.** First-fit only yields the
+  topmost free lane if boxes arrive in the order they *start*, and a flag past
+  `frac > 0.94` folds to the other side of its line — so it starts a whole box
+  earlier than its position implies. Sorting by position mis-lanes precisely
+  the right-edge flags, which is where the collision was found.
+- **Overlap is a question about pixels**, so it needs the waveform's measured
+  width. That is passed down from `WaveformView`, which already has it from a
+  `ResizeObserver`; a second observer here would measure the same element
+  twice. `FLAG_WIDTH_PX` is an estimate rather than a measurement on purpose:
+  measuring means render, read the box, re-render, twice per frame while
+  panning, to decide something that only has to be approximately right.
+  Over-estimating spends a lane nothing needed; under-estimating lets two
+  labels touch, which is the bug.
+
 ## Writing to SQLite: always an IMMEDIATE transaction
 
 **`db::write_tx` for any transaction that writes. Never `conn.transaction()`.**
@@ -920,7 +943,7 @@ keeps its guard against an internal drag even though a pointer drag starts no
 native session: the cost of being wrong is the overlay covering the drop
 target again.
 
-## The three overrides are all wired now
+## Four backend paths were registered and called by nothing
 
 `set_track_key`, `set_track_tempo` and `set_track_energy` were each written,
 registered in the invoke table, and called by nothing — so the three numbers a
@@ -939,6 +962,17 @@ Each stamps `ValueSource::User`, which is what stops the next analysis pass
 reverting it. A correction a re-analysis undoes is worse than no correction, so
 if a fourth override is ever added, it carries that stamp or it is not an
 override.
+
+`get_cue_counts` was the fourth of the same kind: a command, a repo method and
+a `keystoneService.getCueCounts` whose own comment said it was for the table's
+CUES column — and no caller. The column meanwhile read `track.cuePointCount`,
+a field the read model has never returned, so it showed `--` on every row
+while the player bar showed eight markers for the same track. `useCueCounts`
+now fetches one query per loaded page, never per row, and the count reaches
+`TrackRow` as a plain number so its memo still compares equal.
+
+**Four is a pattern, not a coincidence.** Before adding a command, check
+whether the thing it is for already has one.
 
 ## MCP server (agent access)
 

@@ -24,6 +24,8 @@ export interface CellFormat {
 interface TrackCellProps extends CellFormat {
   column: TrackColumn;
   track: Track;
+  /** Filled cue slots, or null while the page's counts are in flight. */
+  cueCount: number | null;
   onRate: (trackId: string, rating: number) => void;
 }
 
@@ -43,6 +45,7 @@ interface TrackCellProps extends CellFormat {
 export function TrackCell({
   column,
   track,
+  cueCount,
   notation,
   pad,
   decimals,
@@ -70,7 +73,7 @@ export function TrackCell({
       return <EnergyPicker track={track} />;
 
     case 'cuePoints':
-      return <CueCountValue track={track} />;
+      return <CueCountValue track={track} count={cueCount} />;
 
     case 'rating':
       return (
