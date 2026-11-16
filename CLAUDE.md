@@ -81,6 +81,17 @@ cargo bench --bench decode                      # the decode budget
 The `eval` feature is dev-only and gated in `Cargo.toml` with `required-features`. It
 reads a corpus from disk and must never reach a shipped bundle.
 
+**Install locally through `scripts/install-local.sh`, not by hand.** The build
+output at `target/release/bundle/macos/<App>.app` is a real, launchable bundle,
+so Spotlight indexed it and Launchpad offered it alongside the installed copy —
+that is where the duplicate Keystones and Capstones came from, and why they
+returned after every build. The script keeps a `.metadata_never_index` marker in
+`target/`, removes the bundle once installed, stages outside /Applications so a
+failed install cannot leave an `.app.incoming` behind, names the Trash backup
+without an `.app` suffix, and asserts that exactly one copy exists. It also
+turns off updater artifacts, which otherwise fail the build at the last step
+without `TAURI_SIGNING_PRIVATE_KEY` — with the stray bundle already written.
+
 ## Repository layout
 
 ```
