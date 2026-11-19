@@ -1,4 +1,15 @@
 {
+  "0.1.6": {
+    "date": "2026-11-19",
+    "title": "Imported tracks come back into view",
+    "summary": "Tracks imported from a playlist are stored at their real path, so the folder that owns them can find them again.",
+    "highlights": [
+      "Tracks imported from a playlist in a sibling folder were stored at a path no watched folder could match, so they never appeared and were never analysed. Existing libraries are repaired on launch.",
+      "The track list says why a track needs attention — not analysed, ambiguous key, low key confidence or clipping — and carries the key and tempo confidence.",
+      "Crates keep a playing order you can read, reorder and export as an .m3u8 playlist.",
+      "Watched folders can be added, removed and rescanned without opening the window."
+    ]
+  },
   "0.1.5": {
     "date": "2026-11-19",
     "title": "Silence leaves a record, and an interface you can size",

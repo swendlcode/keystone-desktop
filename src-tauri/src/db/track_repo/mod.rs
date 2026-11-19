@@ -235,6 +235,28 @@ impl TrackRepository {
     /// has already recorded. Erring towards re-reading is the safe direction —
     /// the cost of a wrong "stale" is one header probe, the cost of a wrong
     /// "skip" is a row that never catches up with the file.
+    /// `(id, path)` for every row whose path is not lexically normal.
+    ///
+    /// A full scan, which is why it is only ever run by the repair pass: there
+    /// is no index that can answer "contains `/../`", and once the pass has
+    /// run it returns nothing for the rest of the library's life.
+    pub fn unnormalized_paths(&self) -> Result<Vec<(String, String)>> {
+        let conn = self.db.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, path FROM tracks \
+             WHERE path LIKE '%/../%' OR path LIKE '%/./%' OR path LIKE '%//%' \
+                OR path LIKE '%/..' OR path LIKE '%/.'",
+        )?;
+        let mapped = stmt.query_map([], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?;
+        let mut out = Vec::new();
+        for row in mapped {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
     pub fn unchanged_since(&self, candidates: &[(String, i64)]) -> Result<Vec<String>> {
         let conn = self.db.get()?;
         let mut skippable = Vec::new();

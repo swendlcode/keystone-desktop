@@ -91,17 +91,33 @@ fn recover_renames(state: &AppState) {
     });
 }
 
-/// Reconciles against the filesystem, then refills the analysis queue.
+/// Repairs unreachable paths, reconciles against the filesystem, then refills
+/// the analysis queue.
 ///
 /// The queue is resumable across restarts because a 20,000-track library is
 /// hours of work and quitting the app must not mean starting again. Resume is a
 /// single indexed query, so it costs nothing at launch.
+///
+/// The path repair runs **first**, and that order is the point: it rewrites
+/// rows that sit outside every watched root into the root that owns them, so
+/// the reconciler on the next line is what marks them present again. Running
+/// it after would leave them missing until the launch after this one.
 fn resume_work(state: &AppState) {
     let reconciler = state.reconciler.clone();
     let library = state.library.clone();
     let queue = state.queue.clone();
+    let tracks = state.tracks.clone();
     tauri::async_runtime::spawn(async move {
         let _ = tauri::async_runtime::spawn_blocking(move || {
+            match crate::core::path_repair::run(&tracks) {
+                Ok(report) if !report.is_empty() => tracing::info!(
+                    "repaired {} unreachable path(s), dropped {} duplicate(s)",
+                    report.repaired,
+                    report.deduped
+                ),
+                Err(e) => tracing::warn!("path repair failed: {}", e),
+                _ => {}
+            }
             let roots: Vec<String> = library
                 .list_watched()
                 .unwrap_or_default()

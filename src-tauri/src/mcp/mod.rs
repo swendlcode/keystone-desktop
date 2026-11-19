@@ -59,6 +59,9 @@ pub struct McpContext {
     /// tool must not read a different one halfway through a pass.
     pub settings: Settings,
     pub backups_dir: PathBuf,
+    /// The app's data directory. `launch_app` polls the bridge handshake in
+    /// here to find out when the window it started is actually answering.
+    pub data_dir: PathBuf,
     /// `None` when the app is not running.
     pub live: Option<Live>,
 }
@@ -73,6 +76,7 @@ impl McpContext {
             library: state.library.clone(),
             settings: state.settings.read().clone(),
             backups_dir: state.backups_dir.clone(),
+            data_dir: state.data_dir.clone(),
             live: Some(Live {
                 app: state.app.clone(),
                 queue: state.queue.clone(),
@@ -103,8 +107,29 @@ impl McpContext {
             library: Arc::new(LibraryRepository::new(db.clone())),
             settings: crate::state::jobs::settings::load(&data.join("settings.json")),
             backups_dir: data.join("backups"),
+            data_dir: data,
             live: None,
         })
+    }
+
+    /// A standalone context over a scratch library, for the tests in this
+    /// module. Not `cfg(test)`-only data: it is the real `McpContext` over a
+    /// real migrated database, which is what makes the dispatch test mean
+    /// anything.
+    #[cfg(test)]
+    pub fn for_tests() -> Self {
+        let harness = crate::db::test_support::Harness::new();
+        let dir = std::env::temp_dir().join("keystone-mcp-tests");
+        Self {
+            db: harness.db.clone(),
+            tracks: harness.tracks.clone(),
+            collections: harness.collections.clone(),
+            library: harness.library.clone(),
+            settings: Settings::default(),
+            backups_dir: dir.join("backups"),
+            data_dir: dir,
+            live: None,
+        }
     }
 
     /// The app handle, or the reason there isn't one.

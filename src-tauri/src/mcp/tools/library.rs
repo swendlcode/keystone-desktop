@@ -23,6 +23,14 @@ const MAX_LIMIT: usize = 500;
 /// cents, four timestamps, every confidence — and a page of fifty would be
 /// mostly numbers nothing asked for. These are the ones a decision gets made
 /// on; `get_track` returns the rest when something actually needs them.
+///
+/// The two confidences and `needsAttention` are here because the flag on its
+/// own is not actionable. `needsAttention: true` on 49 of 50 tracks tells an
+/// agent nothing about what to do; the same 49 carrying `["notAnalyzed"]`
+/// says run the analysis, and a single `["keyAmbiguous"]` says listen to that
+/// one and call `set_key`. The reasons are the four the `improvable`
+/// predicate in `query_builder` is built from, evaluated per row here against
+/// the same threshold, so the list and the filter cannot drift.
 fn brief(track: &Track) -> Value {
     json!({
         "id": track.id,
@@ -31,13 +39,46 @@ fn brief(track: &Track) -> Value {
         "album": track.album,
         "genre": track.genre,
         "bpm": track.tempo_display,
+        "bpmConfidence": track.tempo_confidence,
         "camelot": track.camelot,
+        "keyConfidence": track.key_confidence,
         "energy": track.energy,
         "rating": track.rating,
         "durationMs": track.duration_ms,
         "analyzed": track.analyzed_at.is_some(),
+        "needsAttention": attention_reasons(track),
         "path": track.path,
     })
+}
+
+/// Why `needsAttention` is set, as a list that is empty when it is not.
+///
+/// Must stay in step with the `improvable_only` branch of
+/// `query_builder::build_where`; `IMPROVABLE_KEY_CONFIDENCE` is shared with it
+/// rather than repeated as a literal.
+fn attention_reasons(track: &Track) -> Vec<&'static str> {
+    let mut reasons = Vec::new();
+    if track.analysis_version == 0 {
+        reasons.push("notAnalyzed");
+    }
+    if track.key_mode_ambiguous {
+        reasons.push("keyAmbiguous");
+    }
+    if track
+        .key_confidence
+        .is_some_and(|c| c < crate::db::query_builder::IMPROVABLE_KEY_CONFIDENCE)
+    {
+        reasons.push("lowKeyConfidence");
+    }
+    if track.clipped_peaks.is_some_and(|n| n > 0) {
+        reasons.push("clipping");
+    }
+    reasons
+}
+
+/// `brief`, for the sibling modules that return track rows of their own.
+pub(super) fn brief_of(track: &Track) -> Value {
+    brief(track)
 }
 
 pub fn list_tracks(ctx: &McpContext, args: &Value) -> Result<Value> {

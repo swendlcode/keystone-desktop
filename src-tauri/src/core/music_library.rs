@@ -23,6 +23,7 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use serde::Serialize;
 
+use crate::core::paths;
 use crate::core::scanner;
 use crate::error::{KeystoneError, Result};
 
@@ -106,6 +107,12 @@ pub fn playlist_files(xml: &Path, names: &[String]) -> Result<Vec<PathBuf>> {
 /// does not depend on Apple publishing anything. Relative entries resolve
 /// against the playlist's own folder, which is what the format says and what
 /// makes an exported folder portable.
+///
+/// The resolved path is **normalised** before it is kept. `base.join("../Songs/x")`
+/// opens fine, and a path stored in that shape is invisible to the watched
+/// folder that owns it, because every root match is a string-prefix range scan
+/// — see `core::paths`. Dedupe runs on the normalised path too, so the same
+/// file reached by two spellings is one entry rather than two rows.
 pub fn read_playlist_file(path: &Path) -> Result<Vec<PathBuf>> {
     let text = read_text_lossy(path)?;
     let base = path.parent().unwrap_or(Path::new("."));
@@ -137,6 +144,7 @@ pub fn read_playlist_file(path: &Path) -> Result<Vec<PathBuf>> {
             }
         };
 
+        let candidate = paths::normalize(&candidate);
         if usable(&candidate) && !out.contains(&candidate) {
             out.push(candidate);
         }

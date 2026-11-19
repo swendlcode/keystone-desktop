@@ -134,7 +134,8 @@ src-tauri/              Rust backend
     bin/mcp.rs          `keystone-mcp` — the MCP server. See "MCP server" below
     mcp/                The agent tool surface: context, catalog, stdio, tools/
     bridge/             Loopback HTTP the MCP server talks to while the app runs
-    lib.rs              Builder chain. Startup order: recover renames, then resume work
+    lib.rs              Builder chain. Startup order: recover renames, then repair
+                        paths, reconcile, resume the queue — in that order
     handlers.rs         `keystone_invoke_handler!` — the one invoke table
     state.rs            AppState: pool, repos, indexer, queue, watcher, settings
     events.rs           Every backend -> frontend event name, declared once
@@ -1113,6 +1114,43 @@ Two were removed rather than listed for ever:
   reason it never told someone on a year-old build they were up to date. A
   stub that lies is worse than no stub.
 
+## A stored path must be lexically normal
+
+Every match between a track and the folder that owns it is a **string prefix
+range scan** on `path` — `existing_paths`, `mark_missing_under`, the scope
+filters in `query_builder`, all of them leaning on `idx_tracks_path`. So a
+path that is correct but not normal is not untidy, it is **unreachable**.
+
+The m3u importer resolved a relative entry against the playlist's own folder,
+which the format says to do and which is right. What it did not do was
+normalise the result. A playlist in `<crate>/Playlists/` listing
+`../Songs/Vol. 2/track.mp3` was stored as
+`<crate>/Playlists/../Songs/Vol. 2/track.mp3`. The OS opens that happily, so
+the import looked like it worked — and `"<crate>/Playlists/.."` sorts before
+`"<crate>/Songs/"`, so not one of the fifty imported tracks fell inside the
+watched root that owned them. The reconciler never visited them, a rescan
+never touched them, `library_stats` answered `tracks: 0`, and fifty rows sat
+in the table that no view in the app could reach.
+
+- `core::paths::normalize` is **lexical**: no `canonicalize`, no stat, no
+  symlink resolution. `canonicalize` would rewrite a path the user recognises
+  into `/private/var/…` and would resolve a symlinked library onto its target,
+  which is a different path from the one they added.
+- `core::path_repair` is the one-time pass for rows already stored that way.
+  It runs **before the reconciler** at launch, so the rows it rewrites are
+  reconciled in the same pass rather than staying missing until the launch
+  after. `rescan_watched_folder` runs it first too, for the same reason.
+- It rewrites `path` and **keeps the `id`**, although the id is `xxh3(path)`.
+  Five tables reference `track_id`, the upsert conflicts on `path`, and the
+  analysis cache is keyed on content — so keeping the id repairs the row
+  without disturbing the rating, cues, beatgrid or collection membership
+  hanging off it, and the next scan finds the row by path.
+- Where normalising would collide with a row that already holds the clean
+  path, the unnormalised row is the one that goes. That is the only case that
+  loses anything, and what it loses is a row nothing could reach.
+
+Anything that writes a path into the table normalises it first.
+
 ## MCP server (agent access)
 
 `keystone-mcp` is a third binary in the same crate (`src-tauri/src/bin/mcp.rs`)
@@ -1165,7 +1203,43 @@ tables would be two chances for the paths to disagree about what a tool does.
   protocol error never reaches the model, and the sentence is the only thing
   it has to correct itself with.
 - `list_tracks` returns a deliberate projection, not the whole `Track`. Sixty
-  fields times fifty rows is the agent's context spent on tuning cents.
+  fields times fifty rows is the agent's context spent on tuning cents. It
+  carries both confidences and **`needsAttention` as a list of reasons**
+  (`notAnalyzed`, `keyAmbiguous`, `lowKeyConfidence`, `clipping`) rather than
+  as a flag: 49 of 50 tracks flagged tells an agent nothing to do, while the
+  same 49 reading `notAnalyzed` says run the analysis. The reasons are
+  evaluated per row from the same four conditions — and the same
+  `IMPROVABLE_KEY_CONFIDENCE` — that `query_builder`'s `improvable` predicate
+  is built from, so the list and the filter cannot drift.
+- **Watched folders are managed over MCP**: `add_watched_folder`,
+  `remove_watched_folder` and `rescan_watched_folder`. All three need the app,
+  because the indexer's two stages and the analysis queue are owned by the
+  window — a scan that only wrote rows would leave the library un-analysed
+  while reporting success. They reuse `library_commands`' own `spawn_scan` and
+  `to_jobs`, so a scan started by an agent is the scan a drop starts.
+- **`launch_app`** is how an agent satisfies that, and every live-only tool's
+  refusal names it. The app is found from `current_exe` — `keystone-mcp` ships
+  inside the bundle — rather than from a guess at /Applications, so a library
+  kept elsewhere and a dev build both work. It polls the bridge and returns
+  only once the window answers, so the next call does not race the launch.
+- **Collections are ordered, and the order is reachable**: `position` has
+  always been in `collection_tracks`, but nothing exposed it.
+  `get_collection_tracks` answers in playing order with each track's position,
+  `reorder_collection` sets it, and `create_collection` takes `trackIds` so
+  building a set is one call. `list_tracks` with a `collectionId` answers a
+  different question — it sorts by a column, so it says what is in the crate
+  but never what order it runs in. Position is deliberately not a sortable
+  column: it only means anything within one collection.
+- **`export_playlist_m3u`** writes a crate out in its stored order, with
+  absolute paths and an `.m3u8` extension. Absolute because a relative
+  playlist is what put `../` into fifty stored paths in the first place;
+  `.m3u8` because the extension is the only thing that tells a player the file
+  is UTF-8, and these titles are full of accents and `&`.
+- The catalogue, `TOOL_NAMES` and the `dispatch` match arms have to agree, and
+  for a long time nothing checked it — `TOOL_NAMES` was exported and read by
+  nothing. `catalog.rs`'s tests now assert the three line up, that every tool
+  declares the arguments it requires, and that every advertised tool
+  dispatches. The first run of them found two ordering mistakes.
 ### Shipping it: nothing to do
 
 `keystone-mcp` rides in the installers because **tauri-cli ships every

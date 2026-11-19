@@ -115,6 +115,27 @@ impl TrackRepository {
         Ok(())
     }
 
+    /// Rewrites `path` alone, for the normalisation repair.
+    ///
+    /// Deliberately not `update_path`: that one is the renamer's, and it also
+    /// writes `filename`, `original_filename` and `rename_pattern`. A
+    /// normalisation changes only the directory part, so the filename is
+    /// already right, and stamping `rename_pattern` would claim Keystone
+    /// renamed a file it never touched.
+    ///
+    /// `id` is left alone although it is `xxh3(path)`. Five tables reference
+    /// `track_id`, the upsert conflicts on `path`, and the analysis cache is
+    /// keyed on content rather than id — so keeping the id repairs the row
+    /// without touching the rating, cues, beatgrid or collection membership
+    /// hanging off it. The next scan finds the row by path and keeps it.
+    pub fn renormalize_path(&self, track_id: &str, new_path: &str) -> Result<()> {
+        self.conn()?.execute(
+            "UPDATE tracks SET path = ?1, updated_at = ?2 WHERE id = ?3",
+            rusqlite::params![new_path, now(), track_id],
+        )?;
+        Ok(())
+    }
+
     pub fn increment_play_count(&self, track_id: &str) -> Result<()> {
         self.conn()?.execute(
             "UPDATE tracks SET play_count = play_count + 1, last_played = ?1 WHERE id = ?2",

@@ -15,6 +15,10 @@ pub const TOOL_NAMES: &[&str] = &[
     "list_genres",
     "library_stats",
     "list_watched_folders",
+    "add_watched_folder",
+    "remove_watched_folder",
+    "rescan_watched_folder",
+    "launch_app",
     "set_key",
     "set_tempo",
     "set_energy",
@@ -26,6 +30,8 @@ pub const TOOL_NAMES: &[&str] = &[
     "delete_collection",
     "add_to_collection",
     "remove_from_collection",
+    "get_collection_tracks",
+    "reorder_collection",
     "get_tags",
     "set_tags",
     "find_replace_tags",
@@ -35,6 +41,7 @@ pub const TOOL_NAMES: &[&str] = &[
     "restore_tag_backup",
     "rename_files",
     "export_files",
+    "export_playlist_m3u",
     "export_collection_csv",
 ];
 
@@ -123,8 +130,32 @@ pub fn tool_list() -> Value {
         ),
         tool(
             "list_watched_folders",
-            "The folders Keystone indexes.",
+            "The folders Keystone indexes, each with its path and whether it is active. Tracks only live under one of these, so this is where to look when the library reads as empty.",
             json!({}),
+            &[],
+        ),
+        tool(
+            "add_watched_folder",
+            "Add a folder to the library and index it. Needs Keystone running: call launch_app first if it is not. Indexing runs in the background, so library_stats fills in over the following minutes rather than immediately.",
+            json!({ "path": string("Absolute path to the folder.") }),
+            &["path"],
+        ),
+        tool(
+            "remove_watched_folder",
+            "Stop indexing a folder. Its tracks are marked missing rather than deleted, so ratings, cues and analysis survive if it comes back. Needs Keystone running.",
+            json!({ "path": string("Absolute path of a folder from list_watched_folders.") }),
+            &["path"],
+        ),
+        tool(
+            "rescan_watched_folder",
+            "Walk a watched folder again and queue anything new or changed. Pass no path to rescan every active folder. Needs Keystone running.",
+            json!({ "path": string("One folder to rescan. Omit for all of them.") }),
+            &[],
+        ),
+        tool(
+            "launch_app",
+            "Start Keystone and wait until it answers, so the tools that need the running app will work. Returns immediately if it is already running.",
+            json!({ "wait": boolean("Wait for it to come up, default true. False returns as soon as it has been started.") }),
             &[],
         ),
         tool(
@@ -180,8 +211,11 @@ pub fn tool_list() -> Value {
         ),
         tool(
             "create_collection",
-            "Make a new, empty collection.",
-            json!({ "name": string("What to call it.") }),
+            "Make a new collection, optionally with its tracks already in order.",
+            json!({
+                "name": string("What to call it."),
+                "trackIds": id_list("Tracks to put in it, in playing order. Optional.")
+            }),
             &["name"],
         ),
         tool(
@@ -214,6 +248,21 @@ pub fn tool_list() -> Value {
             json!({
                 "collectionId": string("The collection's id."),
                 "trackIds": id_list("Tracks to remove.")
+            }),
+            &["collectionId", "trackIds"],
+        ),
+        tool(
+            "get_collection_tracks",
+            "A collection's tracks in playing order, each with its position. This is the one that answers what order a set runs in; list_tracks with collectionId sorts by a column instead.",
+            json!({ "collectionId": string("The collection's id.") }),
+            &["collectionId"],
+        ),
+        tool(
+            "reorder_collection",
+            "Set the order a collection's tracks play in. List every track in the collection, in the order you want them.",
+            json!({
+                "collectionId": string("The collection's id."),
+                "trackIds": id_list("Every track in the collection, in the new order.")
             }),
             &["collectionId", "trackIds"],
         ),
@@ -296,6 +345,15 @@ pub fn tool_list() -> Value {
             &["trackIds", "destinationFolder"],
         ),
         tool(
+            "export_playlist_m3u",
+            "Write a collection out as an .m3u8 playlist in its stored order, with absolute paths, for loading into a DJ application.",
+            json!({
+                "collectionId": string("The collection's id."),
+                "destinationPath": string("Where to write it. The .m3u8 extension is added if missing.")
+            }),
+            &["collectionId", "destinationPath"],
+        ),
+        tool(
             "export_collection_csv",
             "Write a collection to a CSV: number, artist, title, key, BPM, energy, genre, path. Opens correctly in Excel.",
             json!({
@@ -305,4 +363,84 @@ pub fn tool_list() -> Value {
             &["collectionId", "destinationPath"],
         ),
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The module note says a tool cannot be advertised without being
+    /// dispatched, or the other way round. Nothing enforced it: `TOOL_NAMES`
+    /// was exported and read by nothing, so the three lists could drift
+    /// silently and a tool the model can see would answer "no tool named".
+    #[test]
+    fn the_catalogue_and_the_name_list_agree() {
+        let advertised: Vec<String> = tool_list()
+            .as_array()
+            .expect("an array of tools")
+            .iter()
+            .map(|t| t["name"].as_str().expect("a name").to_string())
+            .collect();
+        let listed: Vec<String> = TOOL_NAMES.iter().map(|s| s.to_string()).collect();
+        assert_eq!(advertised, listed, "tool_list and TOOL_NAMES disagree");
+    }
+
+    #[test]
+    fn every_advertised_tool_is_dispatched() {
+        let ctx = crate::mcp::McpContext::for_tests();
+        for name in TOOL_NAMES {
+            // `launch_app` is the one tool whose no-argument call does
+            // something: it would start Keystone on whoever is running the
+            // tests. It is dispatched, which is checked by the arm existing
+            // in `tools::dispatch` and by the catalogue test above.
+            if *name == "launch_app" {
+                continue;
+            }
+            // Called with no arguments: almost every tool refuses, and that is
+            // fine. The one answer that must never come back is the
+            // unknown-tool error, which is what a missing match arm gives.
+            if let Err(e) = crate::mcp::dispatch(&ctx, name, &json!({})) {
+                let message = e.to_string();
+                assert!(
+                    !message.contains("no tool named"),
+                    "{name} is advertised but not dispatched"
+                );
+            }
+        }
+    }
+
+    /// Every entry needs a description and a coherent schema.
+    ///
+    /// Deliberately not a length bar: the descriptions are the model's only
+    /// documentation, but `"Rename a collection."` says the whole job in four
+    /// words and a minimum character count would only buy padding. What is
+    /// worth enforcing is that nothing ships undocumented, and that a tool
+    /// cannot require an argument it never declares — an agent sending that
+    /// argument would be told it is unexpected, and omitting it would be told
+    /// it is required.
+    #[test]
+    fn every_tool_describes_itself() {
+        for entry in tool_list().as_array().expect("an array") {
+            let name = entry["name"].as_str().expect("a name");
+            let description = entry["description"].as_str().unwrap_or_default();
+            assert!(
+                !description.trim().is_empty(),
+                "{name} has no description"
+            );
+            assert_eq!(
+                entry["inputSchema"]["type"], "object",
+                "{name} has no object input schema"
+            );
+            for required in entry["inputSchema"]["required"]
+                .as_array()
+                .expect("a required list")
+            {
+                let key = required.as_str().expect("a string");
+                assert!(
+                    entry["inputSchema"]["properties"].get(key).is_some(),
+                    "{name} requires `{key}` but does not declare it"
+                );
+            }
+        }
+    }
 }

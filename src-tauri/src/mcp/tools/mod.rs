@@ -14,7 +14,8 @@ use crate::error::{KeystoneError, Result};
 
 mod collections;
 mod files;
-mod library;
+mod folders;
+pub(super) mod library;
 mod tags;
 
 pub fn dispatch(ctx: &McpContext, tool: &str, args: &Value) -> Result<Value> {
@@ -25,6 +26,10 @@ pub fn dispatch(ctx: &McpContext, tool: &str, args: &Value) -> Result<Value> {
         "list_genres" => library::list_genres(ctx),
         "library_stats" => library::library_stats(ctx),
         "list_watched_folders" => library::list_watched_folders(ctx),
+        "add_watched_folder" => folders::add_watched(ctx, args),
+        "remove_watched_folder" => folders::remove_watched(ctx, args),
+        "rescan_watched_folder" => folders::rescan(ctx, args),
+        "launch_app" => folders::launch_app(ctx, args),
 
         // Correcting what the engine decided
         "set_key" => library::set_key(ctx, args),
@@ -39,6 +44,8 @@ pub fn dispatch(ctx: &McpContext, tool: &str, args: &Value) -> Result<Value> {
         "rename_collection" => collections::rename(ctx, args),
         "delete_collection" => collections::delete(ctx, args),
         "add_to_collection" => collections::add_tracks(ctx, args),
+        "get_collection_tracks" => collections::tracks(ctx, args),
+        "reorder_collection" => collections::reorder(ctx, args),
         "remove_from_collection" => collections::remove_tracks(ctx, args),
 
         // Tags, written into the files themselves
@@ -54,6 +61,7 @@ pub fn dispatch(ctx: &McpContext, tool: &str, args: &Value) -> Result<Value> {
         "rename_files" => files::rename(ctx, args),
         "export_files" => files::export(ctx, args),
         "export_collection_csv" => files::export_csv(ctx, args),
+        "export_playlist_m3u" => files::export_m3u(ctx, args),
 
         other => Err(KeystoneError::NotFound(format!("no tool named {other}"))),
     }

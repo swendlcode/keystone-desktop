@@ -179,7 +179,7 @@ pub async fn get_library_folders(state: State<'_, AppState>) -> Result<Vec<Libra
 /// The walk runs in the background, so ADD TRACKS returns as soon as the root is
 /// recorded. A 20,000-track folder is minutes of walking and the rows appear in
 /// the table as the IO stage commits them.
-fn spawn_scan(indexer: Arc<Indexer>, root: PathBuf, queue: Arc<AnalysisQueue>) {
+pub(crate) fn spawn_scan(indexer: Arc<Indexer>, root: PathBuf, queue: Arc<AnalysisQueue>) {
     tauri::async_runtime::spawn(async move {
         let scanner = indexer.clone();
         let _ = tauri::async_runtime::spawn_blocking(move || {
@@ -209,7 +209,7 @@ fn spawn_scan(indexer: Arc<Indexer>, root: PathBuf, queue: Arc<AnalysisQueue>) {
 /// indexer's own idle flag is the cheap way to know they have landed, and
 /// `enqueue_pending` is idempotent — a row already queued or already analysed
 /// is not queued twice — so an early or repeated call costs nothing.
-fn spawn_analysis_after_indexing(indexer: Arc<Indexer>, queue: Arc<AnalysisQueue>) {
+pub(crate) fn spawn_analysis_after_indexing(indexer: Arc<Indexer>, queue: Arc<AnalysisQueue>) {
     tauri::async_runtime::spawn(async move {
         // Up to two minutes of waiting, then enqueue whatever has landed. A
         // walk of a very large folder can outlast this; the next pass picks
@@ -233,7 +233,7 @@ fn spawn_analysis_after_indexing(indexer: Arc<Indexer>, queue: Arc<AnalysisQueue
     });
 }
 
-fn to_jobs(files: Vec<ScannedFile>) -> Vec<IndexJob> {
+pub(crate) fn to_jobs(files: Vec<ScannedFile>) -> Vec<IndexJob> {
     files
         .into_iter()
         .map(|f| IndexJob {
