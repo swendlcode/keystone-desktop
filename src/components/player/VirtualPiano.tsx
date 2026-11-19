@@ -57,8 +57,16 @@ export function VirtualPiano({ keyRoot, keyMode, notation }: VirtualPianoProps) 
       <span className="mono shrink-0 text-xs text-keystone-lime">{name}</span>
       {/* The keyboard sits on its own dark bed so the white keys read as
           keys in the light theme too, where the panel behind them is also
-          near-white. */}
-      <div className="relative h-14 min-w-0 flex-1 select-none overflow-hidden rounded-md bg-[#0e0f10] p-px">
+          near-white.
+
+          The bed is a fixed value rather than a ladder token, for the same
+          reason the key faces are — it must look the same in both themes.
+          It still has to be lifted whenever the page is: it sits ON the page,
+          and when the ladder came up and this did not, the bed fell 2.2 L*
+          BELOW the page and became the one hole in a change set whose whole
+          point was to remove one. It keeps the separation it had before the
+          lift, +0.7 L* over the page and +4.7 for the black keys. */}
+      <div className="relative h-14 min-w-0 flex-1 select-none overflow-hidden rounded-md bg-[#151617] p-px">
         <div className="flex h-full w-full gap-px">
           {Array.from({ length: whiteCount }, (_, i) => {
             const pc = WHITE[i % WHITE.length];
@@ -122,7 +130,7 @@ function Key({
   // being recognisable.
   const base = white
     ? 'bg-[#eceeec] text-[#55584f]'
-    : 'bg-[#17181a] text-[#9a9d98]';
+    : 'bg-[#1d1e20] text-[#9a9d98]';
   const lit = tonic
     ? 'bg-keystone-lime text-[color:var(--color-on-accent)]'
     : inScale

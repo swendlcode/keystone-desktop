@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useLibraryStore } from '../stores/libraryStore';
 import { usePlayerStore } from '../stores/playerStore';
+import { zoomIn, zoomOut, zoomReset } from '../utils/appZoom';
 
 /** True when a keystroke belongs to a field rather than to the window. */
 function inField(target: EventTarget | null): boolean {
@@ -49,6 +50,23 @@ export function useSelectAll(ids: string[]) {
 export function useKeyboard() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Zoom is handled ahead of the field guard on purpose: it has to work
+      // while a tag cell has focus, the same way it does in a browser.
+      if (e.metaKey || e.ctrlKey) {
+        // `=` is the unshifted key that carries `+`; `code` covers the numpad
+        // and layouts that put `+` somewhere else.
+        const bigger = e.key === '+' || e.key === '=' || e.code === 'NumpadAdd';
+        const smaller = e.key === '-' || e.key === '_' || e.code === 'NumpadSubtract';
+        const reset = e.key === '0' || e.code === 'Numpad0';
+        if (bigger || smaller || reset) {
+          e.preventDefault();
+          if (bigger) zoomIn();
+          else if (smaller) zoomOut();
+          else zoomReset();
+          return;
+        }
+      }
+
       // Never steal a key from a field — the tag editor is a grid of them.
       if (inField(e.target)) return;
 

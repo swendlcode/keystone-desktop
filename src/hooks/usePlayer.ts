@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { usePlayerStore } from '../stores/playerStore';
 import { keystoneService, mediaUrl } from '../services/keystoneService';
 import { useEffectiveSettings } from './useSettings';
+import { dump, noteAudible, noteStep, plog } from '../services/playbackLog';
 import type { Track } from '../types';
 
 /**
@@ -68,6 +69,7 @@ export function usePlayer() {
      * transport stuck with a loaded file and a dead button.
      */
     const onCanPlay = () => {
+      noteStep('el:canplay');
       if (!usePlayerStore.getState().isPlaying) return;
       if (!el.paused) return;
       void beginPlayback(el);
@@ -81,6 +83,12 @@ export function usePlayer() {
      * button that appears dead — and the two have completely different fixes.
      */
     const onError = () => {
+      plog('el:error', {
+        code: el.error?.code,
+        networkState: el.networkState,
+        readyState: el.readyState,
+      });
+      dump('element error');
       usePlayerStore
         .getState()
         .setLoadError(`${describeMediaError(el)} — ${srcHint(el)}`);
@@ -174,11 +182,16 @@ export function usePlayer() {
         // had not changed, and `readyIdRef` would never be set: a play button
         // that was permanently dead for that track. Asking whether we are
         // still loading the same track survives any number of re-runs.
-        if (loadedIdRef.current !== loadingId || !audioRef.current) return;
+        if (loadedIdRef.current !== loadingId || !audioRef.current) {
+          plog('load:abandoned', { at: 'path', trackId: loadingId });
+          return;
+        }
+        noteStep('load:path');
 
         const blobUrl = await fetchAsBlobUrl(mediaUrl(path));
         // The await above is a second chance for the track to have changed.
         if (loadedIdRef.current !== loadingId || !audioRef.current) {
+          plog('load:abandoned', { at: 'bytes', trackId: loadingId });
           URL.revokeObjectURL(blobUrl);
           return;
         }
@@ -190,6 +203,7 @@ export function usePlayer() {
         const start = startOffsetFor(currentTrack, pendingStartAt, offsetMs / 1000);
         if (start > 0) el2.currentTime = start;
         readyIdRef.current = currentTrack.id;
+        noteStep('load:ready', { startAt: start });
 
         // Playback starts HERE, not in the transport effect below, and that is
         // the whole fix for a double-clicked row doing nothing. `play()` sets
@@ -274,7 +288,9 @@ export function usePlayer() {
 async function fetchAsBlobUrl(url: string): Promise<string> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`the file could not be read (${res.status})`);
-  return URL.createObjectURL(await res.blob());
+  const blob = await res.blob();
+  noteStep('load:bytes', { kb: Math.round(blob.size / 1024) });
+  return URL.createObjectURL(blob);
 }
 
 /**
@@ -294,6 +310,7 @@ async function beginPlayback(el: HTMLAudioElement): Promise<void> {
 
   try {
     await el.play();
+    noteAudible();
     usePlayerStore.getState().setLoadError(null);
   } catch (e) {
     const err = e as { name?: string; message?: string };
@@ -319,15 +336,19 @@ async function beginPlayback(el: HTMLAudioElement): Promise<void> {
       .setLoadError(
         `${err.name ?? 'Playback failed'} · ${srcHint(el)} · ${reach}`,
       );
-    // The whole string, untruncated, into the log that already has the Rust
-    // half of this story.
-    void keystoneService
-      .logClient(
-        `playback failed: ${err.name} ${err.message} | src=${el.src} | ${reach} | ` +
-          `readyState=${el.readyState} networkState=${el.networkState} ` +
-          `mediaError=${el.error?.code ?? 'none'} canPlayMp3=${el.canPlayType('audio/mpeg') || 'no'}`,
-      )
-      .catch(() => {});
+    // The detail goes into the ring rather than straight to the log, so the
+    // file gets the steps that led here as well as the failure itself.
+    plog('play:refused', {
+      name: err.name,
+      message: err.message,
+      src: el.src,
+      reach,
+      readyState: el.readyState,
+      networkState: el.networkState,
+      mediaError: el.error?.code ?? 'none',
+      canPlayMp3: el.canPlayType('audio/mpeg') || 'no',
+    });
+    dump('play refused');
   }
 }
 

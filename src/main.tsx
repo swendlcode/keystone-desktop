@@ -3,12 +3,17 @@ import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import { applyTheme, readPersistedTheme } from './stores/settingsStore';
+import { initZoom } from './utils/appZoom';
 import './index.css';
 
 // Apply the last-chosen theme BEFORE React mounts, so the first paint matches
 // the user's preference instead of flashing dark and swapping when settings
 // load. `useSettingsSync` reconciles it against the saved value after mount.
 applyTheme(readPersistedTheme());
+
+// Same reason, same place: the saved interface scale is restored before React
+// mounts, so the first frame is already at the user's size.
+initZoom();
 
 window.addEventListener('error', (e) => {
   console.error('[keystone] unhandled error:', e.error ?? e.message);

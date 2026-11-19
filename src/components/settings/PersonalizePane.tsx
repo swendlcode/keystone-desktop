@@ -3,6 +3,7 @@ import { Select } from '../ui/Select';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { SettingGroup, SettingNote, SettingRow, SettingSection } from './SettingSection';
 import { useSettingsWriter } from './useSettingsWriter';
+import { ZoomSetting } from './ZoomSetting';
 import type { Settings, Theme } from '../../types';
 
 const THREADS = [0, 1, 2, 4, 6, 8, 12, 16];
@@ -16,6 +17,8 @@ export function PersonalizePane({ settings }: { settings: Settings }) {
   return (
     <SettingSection title="Personalize">
       <ThemeGroup theme={theme} setTheme={setTheme} />
+
+      <ZoomSetting />
 
       <SettingGroup label="Performance">
         <SettingRow label="Scan threads" hint="Walking folders.">

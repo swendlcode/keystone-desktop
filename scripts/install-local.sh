@@ -40,8 +40,25 @@ trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "$TARGET"
 touch "$TARGET/.metadata_never_index"
 
+BUILD_FILE="$PROJECT/src/data/build.json"
+
 if [ "${1:-}" != "--no-build" ]; then
-  echo ":: building $APP_NAME"
+  # Count the build before making it. The version number says what changed;
+  # this says which copy is installed, which is the question that could not be
+  # answered while several builds of the same version went on and off the
+  # machine in one afternoon.
+  # A missing file is a first build and legitimately counts 1. A node that
+  # will not run, an unreadable file or malformed JSON is not — falling back
+  # to 1 there silently restarts a counter whose only job is to be monotonic,
+  # and the number on screen then names a build that already existed.
+  if [ -f "$BUILD_FILE" ]; then
+    BUILD="$(node -p "JSON.parse(require('fs').readFileSync('$BUILD_FILE','utf8')).build + 1")" || {
+      echo "!! cannot read $BUILD_FILE — refusing to restart the build count"; exit 1; }
+  else
+    BUILD=1
+  fi
+  printf '{\n  "build": %s\n}\n' "$BUILD" > "$BUILD_FILE"
+  echo ":: building $APP_NAME (build $BUILD)"
   # Updater artifacts are turned off for a local install: signing them needs
   # TAURI_SIGNING_PRIVATE_KEY, which lives only in CI, and without it the
   # build fails at the very last step with the bundle already written —
@@ -52,7 +69,8 @@ fi
 [ -d "$BUILT" ] || { echo "no bundle at $BUILT"; exit 1; }
 
 VERSION="$(defaults read "$BUILT/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null || echo unknown)"
-echo ":: installing $APP_NAME $VERSION"
+BUILD="$(node -p "JSON.parse(require('fs').readFileSync('$BUILD_FILE','utf8')).build" 2>/dev/null || echo '?')"
+echo ":: installing $APP_NAME $VERSION ($BUILD)"
 
 ditto "$BUILT" "$STAGE/$APP_NAME.app"
 
@@ -75,4 +93,4 @@ echo "   in the build tree    : ${STRAY:-none}"
 [ "$COPIES" = "1" ] || { echo "!! expected exactly one installed copy"; exit 1; }
 [ -z "$STRAY" ] || { echo "!! build tree still holds a bundle"; exit 1; }
 
-echo "OK $APP_NAME $VERSION installed ($BUNDLE_ID), no duplicates"
+echo "OK $APP_NAME $VERSION build $BUILD installed ($BUNDLE_ID), no duplicates"

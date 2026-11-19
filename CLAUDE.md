@@ -113,13 +113,15 @@ src/                    React frontend
   pages/                LibraryPage, TagsPage, SettingsPage
   hooks/                useLibrary, useAnalysis, useCues, useCollections, usePlayer,
                         useSettings, useKeyboard, useDragSession
-  services/             keystoneService — the ONLY layer that calls `invoke()`
+  services/             keystoneService — the ONLY layer that calls `invoke()`;
+                        playbackLog (the player's in-memory flight recorder)
   stores/               libraryStore, playerStore, analysisStore, collectionStore,
                         dragStore, settingsStore, uiStore (Zustand)
   types/                Shared TS types, re-exported from index.ts; ipc.ts holds the
                         event-name table
-  utils/                camelot, camelotColors, formatters
+  utils/                camelot, camelotColors, formatters, appBuild, appZoom
   data/changelog.json   Release notes, read by CI to build the GitHub release body
+  data/build.json       Build counter, incremented by scripts/install-local.sh
 
 scripts/
   camelot-scale.mjs     Colour-ramp check, run by `npm run build`
@@ -876,7 +878,7 @@ generated `camelot.*` scale. Tokens are stored as space-separated RGB triplets w
 `rgb()` wrapper, which is what lets Tailwind's `<alpha-value>` compose opacity
 modifiers (`bg-keystone-lime/10`).
 
-- `--keystone-black` `#0B0D0A` (bg) · `--keystone-lime` `#99F23F` (accent/CTA) ·
+- `--keystone-black` `#131512` (bg) · `--keystone-lime` `#99F23F` (accent/CTA) ·
   `--keystone-moss` `#87D936` (shade, pressed, gradients) · `--keystone-white` `#F7F7F7`
 - Keystone's accent is one rotation of a shared palette: **Stack `#F2613F`, Keystone
   `#99F23F`, Capstone `#3FC5F2`.** Same hue geometry, different position on the wheel.
@@ -895,9 +897,75 @@ modifiers (`bg-keystone-lime/10`).
 - **Keep UI copy short.** The owner's standing feedback, more than once: too much text.
   Labels, not sentences.
 
+**The dark ladder moves as a unit.** It used to bottom out at `#0B0D0A`, which read as
+a hole rather than a surface. Raising only the page background would have pushed it
+past `--gray-900` and inverted the shell, so every rung came up together: bg `#131512`,
+shell `#1A1B19`, cards `#232522`, borders `#2D2F2C`. `--gray-500` was lifted with them
+(`#555854` → `#5E615D`) so the faintest text keeps its contrast against the lighter
+background instead of losing it — surface separation bg→card improved 1.14 → 1.19, and
+`--gray-400`, the muted body text, still clears 4.5:1 at 5.33. The green cast is
+carried rung by rung: it is the brand, and it is what tells Keystone apart from
+Capstone's neutral dark.
+
+**Three** files carry the background and must agree, or the window flashes the old
+colour before the first paint: `src/index.css`, `index.html`'s `theme-color`, and
+`src-tauri/tauri.conf.json`'s `backgroundColor` — which held Stack's old neutral
+`#0C0C0C` for four releases, so the frame flashed grey in front of a green-black app.
+There is no fourth: the theme picker in `PersonalizePane.tsx` is drawn from tokens, not
+hex swatches, so it cannot drift. `VirtualPiano.tsx`'s key colours and
+`--camelot-fg-b` / `--color-on-accent` are deliberately theme-independent object
+colours, not ladder rungs.
+
 Brand source artwork lives in `../keystone-assets` and its README documents how the
 Tauri icon set was generated. The app's own inline marks are
 `src/assets/logo/*.svg` + `components/ui/LogoMark.tsx`.
+
+## Interface scale
+
+`utils/appZoom.ts` drives the **webview's own zoom**, the same mechanism a browser's
+Cmd +/- uses, rather than a root font size. Every dimension here is a px literal — the
+piano's key widths, the wheel's radii, the waveform's height, a table row — so scaling
+type alone gives bigger text inside the same furniture. Steps are a fixed ladder; the
+factor is persisted in `localStorage['keystone:zoom']` because it describes *this
+display*, which is why it is not one of the settings the backend owns.
+
+Needs `core:webview:allow-set-webview-zoom` in `capabilities/default.json`. The
+shortcuts live at the top of `useKeyboard`, **ahead of the `inField` guard**, so zoom
+works while a tag cell has focus — the same way it does in a browser.
+
+**Anything converting screen coordinates to viewport coordinates must divide by
+`currentZoom()`** — `getBoundingClientRect()` reports zoomed CSS pixels while the OS
+reports real ones. Nothing does today: the collection drag is a pointer session inside
+the document, and `TitleBar` hands its drag to `startDragging()` without reading a
+position.
+
+`applyZoom` wraps the call in a real `try`, not a `.catch()`:
+`getCurrentWebviewWindow()` reads `window.__TAURI_INTERNALS__.metadata` and **throws
+synchronously** where that is absent, so there is no promise to reject. The CSS `zoom`
+property is the fallback.
+
+## Silence has to leave a record too
+
+`PlaybackError` reports a *failed* attempt, which covers everything the element is
+willing to say. Two outcomes get past it: a press that makes no sound and raises no
+error (the load chain is an unbounded `fetch`, and a parked fetch resolves neither
+branch, so `loadedIdRef` stays on a track that will never become ready and that row's
+play button is dead until another is chosen), and a press that does make sound
+eventually, with nothing recording which part of the wait was slow — the path lookup,
+the bytes, or the element.
+
+`services/playbackLog.ts` is the ring that answers both. It is **always on and dumps
+itself**: both faults are escaped by restarting, and the restart is what destroys the
+evidence, so asking someone to reproduce and copy a log first is asking them to debug
+while they are trying to work. `noteStep` stamps each stage against the press,
+`noteAudible` closes it, a watchdog writes the ring if nothing reports audible within
+`NO_SOUND_MS`, and `DUMP_THROTTLE_MS` keeps fifty presses in a bad minute from becoming
+fifty dumps. The bounds are generous on purpose — the element is handed the whole
+compressed file before it can start, so a cold read of a long 320kbps track is honestly
+seconds; what this catches is not slow but *never*.
+
+Settings › About › **Show log file** reveals it, and says when nothing has been recorded
+yet — on a healthy install the button otherwise looked broken.
 
 ## Dragging rows to a collection
 

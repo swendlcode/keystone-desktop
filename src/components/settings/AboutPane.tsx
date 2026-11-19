@@ -1,20 +1,29 @@
+import { useState } from 'react';
 import { Button } from '../ui/Button';
 import { Heart, Logo } from '../ui/icons';
 import { SettingGroup, SettingNote, SettingSection } from './SettingSection';
 import { openExternal, useAppVersion, useUpdateCheck } from './useAppInfo';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
+import { appDataDir, join } from '@tauri-apps/api/path';
+import { versionLabel } from '../../utils/appBuild';
 
 const COFFEE = 'https://www.buymeacoffee.com/swendl';
 
 export function AboutPane() {
   const { data: version } = useAppVersion();
   const { state, check, install } = useUpdateCheck();
+  // `revealItemInDir` rejects when the log does not exist yet, which on a
+  // healthy install is most of the time. Swallowing that made the button
+  // indistinguishable from a broken one: the user cannot tell "nothing has
+  // gone wrong yet" from "this control is dead".
+  const [noLogYet, setNoLogYet] = useState(false);
 
   return (
     <SettingSection title="About">
       <SettingGroup>
         <Logo size={22} />
         <p className="mono mt-2 text-[12px] text-gray-400">
-          Version {version ?? '—'}
+          Version {version ? versionLabel(version) : '—'}
         </p>
         <p className="mono text-[12px] text-gray-500">
           Tauri 2 · React 18 · Rust · SQLite
@@ -55,6 +64,31 @@ export function AboutPane() {
             </Button>
           </>
         )}
+      </SettingGroup>
+
+      <SettingGroup label="Diagnostics">
+        {/* A record that is written automatically and cannot be found is half
+            a record: the file sits beside the database, which is not
+            somewhere anybody would think to look. */}
+        <Button
+          variant="secondary"
+          size="sm"
+          className="self-start"
+          onClick={() => {
+            void appDataDir()
+              .then((dir) => join(dir, 'client-log.txt'))
+              .then(revealItemInDir)
+              .then(() => setNoLogYet(false))
+              .catch(() => setNoLogYet(true));
+          }}
+        >
+          SHOW LOG FILE
+        </Button>
+        <SettingNote>
+          {noLogYet
+            ? 'Nothing recorded yet — no playback has failed on this machine.'
+            : 'Written when playback fails, or when a track takes too long to start.'}
+        </SettingNote>
       </SettingGroup>
 
       <SettingGroup label="Support">

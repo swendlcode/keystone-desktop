@@ -1,4 +1,16 @@
 {
+  "0.1.5": {
+    "date": "2026-11-19",
+    "title": "Silence leaves a record, and an interface you can size",
+    "summary": "When a track fails to play or takes too long to start, the steps that led there are written down. The whole interface can also be scaled to the display you are on.",
+    "highlights": [
+      "Interface scale: Cmd / Ctrl with + and − size the whole window, not just the text. Cmd / Ctrl 0 goes back to 100%, and the size is remembered per display.",
+      "A track that fails, or takes too long to start, now writes the steps that led there to a log file — Settings › About › Show log file.",
+      "Show log file says when nothing has been recorded yet, instead of looking like a broken button on a healthy install.",
+      "The virtual piano reads as a surface again against the lighter window.",
+      "The dark theme's surfaces were lifted off near-black, and now match Capstone and Stack rung for rung."
+    ]
+  },
   "0.1.4": {
     "date": "2026-11-03",
     "title": "Your folders, your cue counts, and markers you can read",

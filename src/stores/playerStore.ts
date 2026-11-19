@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Track } from '../types';
+import { notePress, noteStopped } from '../services/playbackLog';
 
 /**
  * The transport.
@@ -125,7 +126,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   loadError: null,
   seekTo: null,
 
-  play: (track, startAt = 0) =>
+  play: (track, startAt = 0) => {
+    // The press instant, not the moment the audio path gets round to it:
+    // this line runs inside the double-click handler.
+    notePress(track.id, 'play');
     set({
       currentTrack: track,
       isPlaying: true,
@@ -134,16 +138,25 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       pendingStartAt: startAt,
       viewCentreS: null,
       loadError: null,
-    }),
+    });
+  },
 
   /** Hold the playhead. The spacebar and the transport's pause. */
-  pause: () => set({ isPlaying: false }),
+  pause: () => {
+    noteStopped('pause');
+    set({ isPlaying: false });
+  },
 
-  resume: () => set({ isPlaying: true }),
+  resume: () => {
+    notePress(get().currentTrack?.id ?? null, 'resume');
+    set({ isPlaying: true });
+  },
 
   /** Back to the start. See the note on `stopSeq` above. */
-  stop: () =>
-    set((s) => ({ isPlaying: false, currentTime: 0, stopSeq: s.stopSeq + 1 })),
+  stop: () => {
+    noteStopped('stop');
+    set((s) => ({ isPlaying: false, currentTime: 0, stopSeq: s.stopSeq + 1 }));
+  },
 
   playNext: () => {
     const { currentTrack, playlist } = get();
@@ -153,6 +166,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       : -1;
     const next = playlist[i + 1];
     if (next) {
+      notePress(next.id, 'next');
       set({
         currentTrack: next,
         isPlaying: true,
@@ -176,6 +190,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       : 1;
     const prev = playlist[i - 1];
     if (prev) {
+      notePress(prev.id, 'prev');
       set({
         currentTrack: prev,
         isPlaying: true,
@@ -216,7 +231,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setViewCentre: (viewCentreS) => set({ viewCentreS }),
   setDraggingCueSlot: (draggingCueSlot) => set({ draggingCueSlot }),
   setLoadError: (loadError) => set({ loadError }),
-  clearCurrent: () =>
+  clearCurrent: () => {
+    noteStopped('clear');
     set({
       currentTrack: null,
       isPlaying: false,
@@ -224,7 +240,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       duration: 0,
       viewCentreS: null,
       loadError: null,
-    }),
+    });
+  },
 
   registerSeek: (seekTo) => set({ seekTo }),
 }));

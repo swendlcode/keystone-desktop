@@ -85,15 +85,46 @@ fn enqueue(state: &State<'_, AppState>, files: Vec<PathBuf>) -> usize {
     count
 }
 
-/// A line from the webview, written into the app's own log.
+/// A line from the webview, written into the app's own log and into a file.
 ///
 /// The webview console is not the dev terminal, so a diagnostic the frontend
 /// computes — why playback failed, what a probe of the asset URL returned —
 /// is invisible to anyone reading the log that already carries the Rust side
 /// of the same story. This puts both halves in one place.
 ///
+/// The file half is not redundant. `tracing_subscriber::fmt()` writes to
+/// stdout, and a bundle launched from Finder has no stdout anybody can read:
+/// in the only build a user runs, every line sent here was being written to
+/// nowhere. The file is also the half that survives the restart the user
+/// reaches for when sound stops, which is what destroys the evidence.
+///
 /// Deliberately `warn`: nothing routine calls it.
 #[tauri::command]
-pub fn log_client(message: String) {
+pub fn log_client(state: State<'_, AppState>, message: String) {
     tracing::warn!(target: "keystone_lib::client", "{message}");
+
+    let path = state.data_dir.join("client-log.txt");
+    // Capped rather than rotated. This is a file somebody is asked to send,
+    // not an audit trail, and an unbounded append over a long session is a
+    // diagnostic that fills a disk.
+    let too_big = std::fs::metadata(&path)
+        .map(|m| m.len() > 256 * 1024)
+        .unwrap_or(false);
+    if too_big {
+        let _ = std::fs::remove_file(&path);
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    // Every failure in here is a failure of a diagnostic write: it must never
+    // interrupt the thing it is reporting on, so nothing is propagated.
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        use std::io::Write;
+        let _ = writeln!(f, "{stamp} {message}");
+    }
 }
