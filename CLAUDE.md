@@ -1151,6 +1151,107 @@ in the table that no view in the app could reach.
 
 Anything that writes a path into the table normalises it first.
 
+## Indexing and analysis are two stages, and every way in has to start both
+
+The indexer writes rows and stops. The analysis queue only learns about
+unanalysed rows from `enqueue_pending`, which runs at launch. So **any path
+that enqueues index jobs must also call `spawn_analysis_after_indexing`**, or
+the tracks land in the table with no key, tempo or energy and nothing says
+why — it looks like the import worked and analysis is broken.
+
+Three ways in already did it: a dropped file, a newly watched folder, a
+rescan. `commands/import_commands::enqueue` — both playlist importers — did
+not, which is the whole of the "50 queued, nothing analysed" report. It does
+now.
+
+The spawn has to *wait*: the rows do not exist at the moment the index jobs
+are enqueued, so asking the queue then finds nothing. It polls the indexer's
+idle flag and `enqueue_pending` is idempotent, so an early or repeated call
+costs nothing.
+
+## A tempo can be wrong by a ratio that is not an octave
+
+`fold_into_range` only halves and doubles, and that is right: an octave is the
+one transform that cannot change which beats are beats. It is also why four
+house tracks here read 162.6, 164.8, 167.8 and 170.7 and were never corrected
+— they sit *inside* the 79–192 range, so folding had nothing to do, and
+halving them gives 81–85, which is not the answer either. The answer is three
+quarters: 122, 124, 126, 128. The detector had locked onto a dotted reading of
+the bar.
+
+`core::tempo_fix` suggests the ratio; it never writes. Two rules hold it
+honest:
+
+- **The detector keeps reporting what it measured.** `tempo_raw` is the
+  evidence, and a 174 BPM drum and bass track really is 174. A correction is
+  the *user's* claim, written with `ValueSource::User` so the next analysis
+  pass cannot undo it.
+- **Ambiguity is reported, not resolved.** When two ratios both land in the
+  wanted range the track is listed and left alone. Picking one on the
+  caller's behalf is how a correct 174 becomes 130.5.
+
+The range is an **argument**, not the Tempo range setting. Narrowing that
+setting to 115–135 would not fix a 162.6 track — there is no power of two
+between them — and would re-fold every drum and bass track in the library on
+the way past.
+
+## Reading a name a video site wrote
+
+`tags::filename` parses `Artist - Title` out of a filename for a library
+downloaded from YouTube, where the artist tag is the uploader channel
+(`Defected Records`, `Becky Hill Official`) and the real credit survives only
+in the filename.
+
+The whole difficulty is **which** bracketed group is noise. `(Official Video)`
+is; `(James Hype Remix)`, `(pull me out of this)`, `(Overdrive)` and
+`[Make The Girls Dance Records]` are not. So a group is dropped only when
+*every* word in it is noise — a blocklist of words appearing anywhere would
+eat all four. A title that keeps a redundant `(Audio)` is a cosmetic flaw; one
+that loses `(James Hype Remix)` is a different record.
+
+The eleven-character video id in square brackets is matched on its shape, and
+length alone is not enough: `[Remastered]` is also eleven letters. What an id
+has and a word does not is case that changes mid-string, so the test is a
+digit, a `-`, a `_`, or a lower-to-upper transition. `naCvEJABUyc` and
+`MX7h4FvFPLg` are both real ids from this library and the first has no digit
+at all.
+
+The filename is read through `strip_stem` first, because Keystone's own
+renamer may have composed it from the key and tempo.
+
+## Relinking keeps the row and drops the hash
+
+`relink` points a row at a different file — a master that came back from
+Capstone. The id is kept, for the same reason the path repair keeps it: five
+tables hang off `track_id`, so the rating, cues, beatgrid and collection
+membership come along.
+
+The **content hash is not** kept. It is what the peaks and analysis caches are
+keyed on, and a mastered file is different audio: keeping the old hash would
+draw the old waveform over the new file. The analysis columns stay, which is
+the point — the key and tempo of a master are the key and tempo of what it was
+mastered from. `analysis_version` is untouched too, or the track would sit in
+`needsAttention` as "not analysed" while carrying every number it needs.
+
+## What a set builder is allowed to decide
+
+`core::set_builder` scores a transition on key, tempo and energy, and the
+three are not interchangeable. **Key and tempo are gates; energy is a
+preference.** A pair outside the tempo drift is not a worse transition, it is
+one requiring a trick this app knows nothing about, so it is not offered. An
+energy drop is merely unusual, so it scores lower and still appears — a DJ
+taking the room down is making a choice.
+
+The chain is **greedy on purpose**. A set is played in order and a DJ choosing
+the next record does not know what they will reach for after it, so a globally
+optimal path would be optimising something nobody experiences — and a chain
+that reshuffles its opening because of its ending is not a set anybody can
+learn. Ties break on id so the same library gives the same set twice.
+
+Nothing here writes a collection. A set is a judgement; the agent can file it
+with `create_collection` once somebody has looked at it.
+
+
 ## MCP server (agent access)
 
 `keystone-mcp` is a third binary in the same crate (`src-tauri/src/bin/mcp.rs`)
@@ -1177,10 +1278,21 @@ the context**: the tools are written once against the repositories, and the
 only difference between transports is which context they get. Two dispatch
 tables would be two chances for the paths to disagree about what a tool does.
 
-- `McpContext::live` is `None` standalone. Tools needing the app — only
-  `analyze_tracks`, since the workers live in it — go through
-  `require_live()` and return a sentence saying to open the app, rather than
-  half-working.
+- `McpContext::live` is `None` standalone. Tools needing the app — the
+  analysis queue, the watched-folder tools, `import_tracks` — go through
+  `require_live()` and return a sentence naming `launch_app`, rather than
+  half-working. Everything that is only a database read or a file write works
+  with Keystone closed, including the rekordbox export and the set builder.
+- `export_rekordbox_xml` **always writes to the path the caller names.** The
+  window's export may fall back to the detected rekordbox library, which is
+  right for a button a user pressed; a tool doing the same could overwrite a
+  DJ's collection on a call that read like a harmless export.
+- `get_analysis_status` is the one place an ETA is given, and it is measured
+  from the run's own pace on this machine — never from a per-track cost.
+  `QueueCounters::snapshot` still refuses to put `eta_ms` in the progress
+  event, because every timing behind such a number was measured on one
+  laptop and Windows is two thirds of installs. Cache hits are taken out of
+  the rate or a re-analysed library promises the remainder in seven seconds.
 - The bridge binds `127.0.0.1` **and** requires a bearer token, written to
   `<data>/mcp_bridge.json` at 0600. Loopback is not a permission boundary on
   a shared machine and these tools move files. The comparison is

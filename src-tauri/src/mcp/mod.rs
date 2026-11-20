@@ -27,7 +27,7 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use crate::db::{
-    CollectionRepository, DatabasePool, LibraryRepository, TrackRepository,
+    CollectionRepository, CueRepository, DatabasePool, LibraryRepository, TrackRepository,
 };
 use crate::error::{KeystoneError, Result};
 use crate::state::jobs::AnalysisQueue;
@@ -55,6 +55,9 @@ pub struct McpContext {
     pub tracks: Arc<TrackRepository>,
     pub collections: Arc<CollectionRepository>,
     pub library: Arc<LibraryRepository>,
+    /// Cues and the beatgrid, which the rekordbox export carries out with
+    /// each track. Read-only from here: moving a cue is the window's job.
+    pub cues: Arc<CueRepository>,
     /// A snapshot. Tags are written in the shape the user configured, and a
     /// tool must not read a different one halfway through a pass.
     pub settings: Settings,
@@ -74,6 +77,7 @@ impl McpContext {
             tracks: state.tracks.clone(),
             collections: state.collections.clone(),
             library: state.library.clone(),
+            cues: state.cues.clone(),
             settings: state.settings.read().clone(),
             backups_dir: state.backups_dir.clone(),
             data_dir: state.data_dir.clone(),
@@ -105,6 +109,7 @@ impl McpContext {
             db: db.clone(),
             collections: Arc::new(CollectionRepository::new(db.clone())),
             library: Arc::new(LibraryRepository::new(db.clone())),
+            cues: Arc::new(CueRepository::new(db.clone())),
             settings: crate::state::jobs::settings::load(&data.join("settings.json")),
             backups_dir: data.join("backups"),
             data_dir: data,
@@ -125,6 +130,7 @@ impl McpContext {
             tracks: harness.tracks.clone(),
             collections: harness.collections.clone(),
             library: harness.library.clone(),
+            cues: harness.cues.clone(),
             settings: Settings::default(),
             backups_dir: dir.join("backups"),
             data_dir: dir,

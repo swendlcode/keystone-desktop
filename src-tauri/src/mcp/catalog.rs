@@ -19,11 +19,15 @@ pub const TOOL_NAMES: &[&str] = &[
     "remove_watched_folder",
     "rescan_watched_folder",
     "launch_app",
+    "import_tracks",
+    "relink_track",
     "set_key",
     "set_tempo",
     "set_energy",
     "set_rating",
     "analyze_tracks",
+    "suggest_tempo_fixes",
+    "get_analysis_status",
     "list_collections",
     "create_collection",
     "rename_collection",
@@ -32,16 +36,21 @@ pub const TOOL_NAMES: &[&str] = &[
     "remove_from_collection",
     "get_collection_tracks",
     "reorder_collection",
+    "suggest_next",
+    "build_set",
     "get_tags",
     "set_tags",
     "find_replace_tags",
     "remove_extra_spaces",
     "write_key_and_tempo_tags",
+    "tags_from_filename",
+    "preview_filename_parse",
     "list_tag_backups",
     "restore_tag_backup",
     "rename_files",
     "export_files",
     "export_playlist_m3u",
+    "export_rekordbox_xml",
     "export_collection_csv",
 ];
 
@@ -159,6 +168,24 @@ pub fn tool_list() -> Value {
             &[],
         ),
         tool(
+            "import_tracks",
+            "Bring audio files or folders into the library and start analysing them. A folder becomes a watched folder and is walked; a single file is indexed on its own and its folder is left alone. Needs Keystone running: call launch_app first if it is not.",
+            json!({
+                "paths": id_list("Absolute paths: audio files, folders, or a mix."),
+                "recursive": boolean("What a folder means. True, the default, walks it and keeps watching it. False takes only the audio files directly inside and watches nothing.")
+            }),
+            &["paths"],
+        ),
+        tool(
+            "relink_track",
+            "Point a track at a different file, keeping its analysis, rating, cues and collections. For a track replaced by a better copy of itself — a master that came back from Capstone, say. The waveform is redrawn from the new file.",
+            json!({
+                "trackId": string("The track's id."),
+                "newPath": string("Absolute path of the file it should point at.")
+            }),
+            &["trackId", "newPath"],
+        ),
+        tool(
             "set_key",
             "Override a track's key. Marks it as user-set, so re-analysis will not revert it.",
             json!({
@@ -202,6 +229,25 @@ pub fn tool_list() -> Value {
                 "force": boolean("Re-analyse tracks that already have results.")
             }),
             &["trackIds"],
+        ),
+        tool(
+            "suggest_tempo_fixes",
+            "Find tracks whose tempo is out by a ratio and correct them. Give the range this material lives in — 115 to 135 for house — and any track outside it that a simple ratio brings inside is reported with the ratio named. This catches what the display fold cannot: a house track detected at 162.6 is three quarters out, which is not an octave, so halving and doubling both leave it wrong. A track where two ratios both fit is reported and never written.",
+            json!({
+                "bpmMin": number("Bottom of the range this material lives in. Defaults to the Tempo range in Settings."),
+                "bpmMax": number("Top of that range."),
+                "trackIds": id_list("Which tracks. Omit to examine the analysed library."),
+                "maxConfidence": number("Only consider tracks whose tempo confidence is at or below this, 0-1. A confident detection is usually right."),
+                "limit": integer("How many tracks to examine when none are named."),
+                "dryRun": boolean(DRY_RUN)
+            }),
+            &[],
+        ),
+        tool(
+            "get_analysis_status",
+            "How far the analysis has got: the stored counts of analysed and unanalysed tracks, and — while Keystone is running — what the queue is doing now, what failed, and an estimate of the time left measured from this run's own pace on this machine. Answers with the counts alone when the app is closed.",
+            json!({}),
+            &[],
         ),
         tool(
             "list_collections",
@@ -267,6 +313,37 @@ pub fn tool_list() -> Value {
             &["collectionId", "trackIds"],
         ),
         tool(
+            "suggest_next",
+            "What mixes out of a track: candidates ranked by key on the Camelot wheel, then by how little the tempo has to move, then by energy. Pass a collectionId to choose from tonight's crate rather than the whole library. Each candidate says why it is there.",
+            json!({
+                "trackId": string("The track being played."),
+                "collectionId": string("Choose from this collection only."),
+                "bpmDrift": number("How far the tempo may move, as a percentage (6) or a fraction (0.06). Default 6%."),
+                "requireCompatibleKey": boolean("Require a key relation from the wheel. Default true; false lets unanalysed or atonal tracks through."),
+                "climbing": boolean("Prefer energy one level up, default true. False prefers holding level."),
+                "minRating": integer("Only consider tracks rated at least this, 1-5."),
+                "genres": id_list("Only consider these genres."),
+                "limit": integer("How many candidates, default 10.")
+            }),
+            &["trackId"],
+        ),
+        tool(
+            "build_set",
+            "Build a playable order of a given length, each record chosen as the best mix out of the one before. Opens on the lowest-energy track in the pool unless a start is named, and reports the key relation, tempo move and energy step behind every transition. Returns the order; it writes nothing, so put it in a collection with create_collection once you have looked at it.",
+            json!({
+                "minutes": number("How long the set should run, default 60."),
+                "collectionId": string("Build from this collection only."),
+                "startTrackId": string("Open on this track."),
+                "startBpm": number("Prefer an opening track near this tempo."),
+                "bpmDrift": number("How far the tempo may move per transition, as a percentage or a fraction. Default 6%."),
+                "requireCompatibleKey": boolean("Default true."),
+                "climbing": boolean("Default true."),
+                "minRating": integer("Only use tracks rated at least this, 1-5."),
+                "genres": id_list("Only use these genres.")
+            }),
+            &[],
+        ),
+        tool(
             "get_tags",
             "Read the tags as they stand in the file itself, not as the database cached them.",
             json!({ "trackId": string("The track's id.") }),
@@ -312,6 +389,24 @@ pub fn tool_list() -> Value {
             &[],
         ),
         tool(
+            "tags_from_filename",
+            "Rebuild artist and title from the filename, for a library where the artist tag holds the uploader channel rather than the artist. Drops what a video site added — (Official Video), (Lyric Video), the eleven-character video id — and keeps what belongs to the record, such as (James Hype Remix). A name with no `Artist - Title` in it writes nothing. Writes into the files themselves.",
+            json!({
+                "trackIds": id_list("Which tracks. Omit for the whole library."),
+                "genre": string("Optional: a genre to write at the same time, for a library where every genre reads `People & Blogs`."),
+                "useTitleTag": boolean("When the filename has no separator, try the title tag, which is the other place a whole `Artist - Title` ends up. Default true."),
+                "sample": integer("How many proposals to return, default 25."),
+                "dryRun": boolean(DRY_RUN)
+            }),
+            &[],
+        ),
+        tool(
+            "preview_filename_parse",
+            "Show what one filename would parse to, without touching anything. The cheap way to check an awkward name before running tags_from_filename over a library.",
+            json!({ "filename": string("A filename or a bare name; an extension is ignored.") }),
+            &["filename"],
+        ),
+        tool(
             "list_tag_backups",
             "The tag bytes kept before each write to this track, newest first.",
             json!({ "trackId": string("The track's id.") }),
@@ -352,6 +447,19 @@ pub fn tool_list() -> Value {
                 "destinationPath": string("Where to write it. The .m3u8 extension is added if missing.")
             }),
             &["collectionId", "destinationPath"],
+        ),
+        tool(
+            "export_rekordbox_xml",
+            "Write a rekordbox XML of a collection — tracks in playing order, with key, tempo, rating, cue points and the beatgrid — for USB prep on Pioneer gear. The playlist arrives named after the collection. Import it in rekordbox with File, Import Collection; nothing here writes into rekordbox's own library, and the destination is always the path you name.",
+            json!({
+                "collectionId": string("The collection to export, in its playing order."),
+                "trackIds": id_list("Tracks to export instead of a collection."),
+                "destinationPath": string("Where to write the .xml. The extension is added if it is missing."),
+                "playlistName": string("What the playlist is called in rekordbox. Defaults to the collection's name."),
+                "includeEnergy": boolean("Write the energy level into each track's Comments, as `Energy 7`, in front of any comment it already has. Default true: rekordbox has no energy field and Comments is the column DJs read it from."),
+                "dryRun": boolean("Report what would be written without writing it. Defaults to false here: the file goes where you named it and nothing else is touched.")
+            }),
+            &["destinationPath"],
         ),
         tool(
             "export_collection_csv",

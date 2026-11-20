@@ -156,7 +156,7 @@ pub fn tonality(track: &ExportTrack) -> String {
 /// collection runs to tens of MB and millions of elements.
 pub fn write_collection(dest: &Path, tracks: &[ExportTrack]) -> Result<usize> {
     let refs: Vec<&ExportTrack> = tracks.iter().collect();
-    writer::write_document(dest, &refs)
+    writer::write_document(dest, &refs, PLAYLIST_NAME, false)
 }
 
 /// Plan or write. Both go through the same counting pass, so the number the UI
@@ -193,7 +193,13 @@ pub fn run(
         return Ok(report);
     }
 
-    let written = writer::write_document(dest, &present)?;
+    let playlist = request
+        .playlist_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .unwrap_or(PLAYLIST_NAME);
+    let written = writer::write_document(dest, &present, playlist, request.include_energy)?;
     report.written = written;
     report.verified = writer::verify_document(dest, written, report.cues_to_write)?;
     Ok(report)

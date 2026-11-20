@@ -92,6 +92,28 @@ pub struct ExportRequest {
     /// Groups the `export_log` rows, so an interrupted run across 5,000 tracks
     /// is reportable and resumable rather than silently half-applied.
     pub run_id: String,
+    /// What the playlist node in a rekordbox document is called. `None` keeps
+    /// the fixed `Keystone Cue Points`, which is what the window has always
+    /// written and what a cue export is for.
+    ///
+    /// It is named for the other use of the same document: a set exported for
+    /// USB prep, where the whole point is that the playlist arrives in
+    /// rekordbox under the name of the set rather than under a name about
+    /// Keystone. Traktor ignores it — an NML edit writes into an existing
+    /// collection and does not create playlists.
+    #[serde(default)]
+    pub playlist_name: Option<String>,
+    /// Write Keystone's energy level into the rekordbox document's `Comments`
+    /// attribute, as `Energy 7`.
+    ///
+    /// Off by default, so the window's cue export is unchanged: it edits a
+    /// collection the user already has and must not rewrite the comments on
+    /// every track in it. On for an agent-driven export, which is building a
+    /// fresh document for USB prep — and there energy is half the point, since
+    /// rekordbox has no energy field of its own and `Comments` is the column
+    /// DJs already read it from. Mixed In Key writes it there too.
+    #[serde(default)]
+    pub include_energy: bool,
 }
 
 /// One struct serves both the plan the UI shows before a write and the result it

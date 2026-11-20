@@ -38,7 +38,10 @@ fn brief(track: &Track) -> Value {
         "title": track.title,
         "album": track.album,
         "genre": track.genre,
-        "bpm": track.tempo_display,
+        // Two decimals, which is as many as the app itself will ever show:
+        // `tempo_display` is an f64 off a least-squares fit, so it arrives as
+        // 125.8110168117556 and a page of those is unreadable.
+        "bpm": track.tempo_display.map(two_decimals),
         "bpmConfidence": track.tempo_confidence,
         "camelot": track.camelot,
         "keyConfidence": track.key_confidence,
@@ -74,6 +77,10 @@ fn attention_reasons(track: &Track) -> Vec<&'static str> {
         reasons.push("clipping");
     }
     reasons
+}
+
+fn two_decimals(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
 }
 
 /// `brief`, for the sibling modules that return track rows of their own.

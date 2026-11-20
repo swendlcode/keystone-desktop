@@ -201,3 +201,25 @@ fn a_malformed_document_fails_verification_rather_than_being_reported_written() 
     let err = writer::verify_document(&dest, 1, 0).unwrap_err();
     assert!(err.to_string().contains("verification failed"), "{err}");
 }
+
+/// Energy is the one thing a rekordbox document cannot say for itself, so it
+/// goes in the Comments column DJs already read it from — in front of the
+/// user's own comment, which is kept.
+#[test]
+fn energy_is_written_in_front_of_the_comment_when_asked_for() {
+    let mut track = testkit::export_track("/music/track.mp3");
+    track.track.energy = Some(7);
+    track.track.comment = Some("peak time".into());
+
+    assert_eq!(super::writer::comments_for_test(&track, true), "Energy 7 - peak time");
+    assert_eq!(super::writer::comments_for_test(&track, false), "peak time");
+
+    track.track.comment = None;
+    assert_eq!(super::writer::comments_for_test(&track, true), "Energy 7");
+
+    // An unanalysed track has no energy to write, and the comment is all
+    // there is to say.
+    track.track.energy = None;
+    track.track.comment = Some("ID?".into());
+    assert_eq!(super::writer::comments_for_test(&track, true), "ID?");
+}

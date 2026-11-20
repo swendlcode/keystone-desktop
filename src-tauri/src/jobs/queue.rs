@@ -170,6 +170,13 @@ impl AnalysisQueue {
         self.shared.counters.snapshot()
     }
 
+    /// How long the current run has been going. Separate from `progress` so
+    /// the webview event keeps its deliberate absence of an estimate while a
+    /// caller that wants one can measure the rate itself.
+    pub fn elapsed_ms(&self) -> Option<u64> {
+        self.shared.counters.elapsed_ms()
+    }
+
     /// Stops handing out work. Tracks already in flight finish and commit:
     /// throwing away two seconds of completed DSP to honour a pause is worse
     /// than the pause arriving a moment late.

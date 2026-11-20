@@ -45,6 +45,11 @@ fn field_from(name: &str) -> Result<TagField> {
 
 /// Inside the app the pass reports progress to the window, so a long
 /// agent-driven re-tag shows up on the same bar a user-driven one does.
+/// The same builder, for the sibling pass in `from_filename`.
+pub(super) fn pass_for(ctx: &McpContext, dry_run: bool) -> TagPass {
+    pass(ctx, dry_run)
+}
+
 fn pass(ctx: &McpContext, dry_run: bool) -> TagPass {
     TagPass::with_app(
         ctx.tracks.clone(),

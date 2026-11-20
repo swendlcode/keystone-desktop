@@ -34,6 +34,10 @@ pub struct QueueCounters {
     total: AtomicUsize,
     current_path: Mutex<Option<String>>,
     last_emit_ms: AtomicU64,
+    /// When the current run started, for the only honest estimate of how long
+    /// it has left: this machine's measured throughput on this material. See
+    /// [`Self::elapsed_ms`].
+    run_started_ms: AtomicU64,
 }
 
 impl QueueCounters {
@@ -51,6 +55,7 @@ impl QueueCounters {
             c.store(0, Ordering::Relaxed);
         }
         *self.current_path.lock() = None;
+        self.run_started_ms.store(now_ms(), Ordering::Relaxed);
         self.state.store(STATE_RUNNING, Ordering::Relaxed);
     }
 
@@ -133,6 +138,21 @@ impl QueueCounters {
             // wrong "time remaining" is worse than none.
             eta_ms: None,
         }
+    }
+
+    /// How long the current run has been going, or `None` before the first
+    /// one. Paired with `done` it gives a rate measured here, on this
+    /// machine, on these files — which is why [`Self::snapshot`] still
+    /// refuses to put an `eta_ms` in the progress event and this is exposed
+    /// separately instead. A number derived from timings measured on one
+    /// developer's laptop is the thing worth refusing; the queue's own
+    /// observed pace is not.
+    pub fn elapsed_ms(&self) -> Option<u64> {
+        let started = self.run_started_ms.load(Ordering::Relaxed);
+        if started == 0 {
+            return None;
+        }
+        Some(now_ms().saturating_sub(started))
     }
 
     pub fn is_drained(&self) -> bool {

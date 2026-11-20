@@ -1,4 +1,16 @@
 {
+  "0.1.7": {
+    "date": "2026-11-19",
+    "title": "Tracks arrive analysed, and tempi that read wrong can be put right",
+    "summary": "An import now analyses what it brought in, and a tempo out by three quarters can be corrected without re-analysing anything.",
+    "highlights": [
+      "An import from a playlist queued the tracks and never analysed them. It does now.",
+      "House tracks detected at 162 to 171 BPM can be corrected to three quarters of that — the error halving and doubling cannot reach.",
+      "Artist and title can be rebuilt from the filename, dropping (Official Video) and the video id while keeping (James Hype Remix).",
+      "A crate exports as rekordbox XML with key, tempo, energy and cue points, named after the crate.",
+      "A track can be pointed at a mastered copy of itself and keep its rating, cues and analysis."
+    ]
+  },
   "0.1.6": {
     "date": "2026-11-19",
     "title": "Imported tracks come back into view",

@@ -2,6 +2,8 @@ pub mod hasher;
 pub mod indexer;
 pub mod music_library;
 pub mod path_repair;
+pub mod set_builder;
+pub mod tempo_fix;
 pub mod paths;
 pub mod peaks;
 pub mod reconciler;

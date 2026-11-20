@@ -15,6 +15,7 @@
 //! `----:com.apple.iTunes:initialkey`, `INITIALKEY`/`KEY`). [`write`] never
 //! does.
 
+pub mod filename;
 pub mod backup;
 pub mod batch;
 pub mod base64;

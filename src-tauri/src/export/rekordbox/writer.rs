@@ -11,7 +11,7 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
 use quick_xml::{Reader, Writer};
 
 use super::{hot_cue_num, kind_attr, mark_type, rating_attr, tempo_markers, tonality};
-use super::{location_uri, PLAYLIST_NAME};
+use super::location_uri;
 use crate::error::{KeystoneError, Result};
 use crate::export::label::cue_label;
 use crate::export::{safety, ExportTrack};
@@ -20,7 +20,12 @@ use crate::models::CuePoint;
 /// The format version the document declares. AlphaTheta's own spec document.
 const FORMAT_VERSION: &str = "1.0.0";
 
-pub fn write_document(dest: &Path, tracks: &[&ExportTrack]) -> Result<usize> {
+pub fn write_document(
+    dest: &Path,
+    tracks: &[&ExportTrack],
+    playlist: &str,
+    energy: bool,
+) -> Result<usize> {
     safety::atomic_write(dest, |file| {
         let mut w = Writer::new_with_indent(BufWriter::new(file), b' ', 2);
         w.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))
@@ -35,8 +40,8 @@ pub fn write_document(dest: &Path, tracks: &[&ExportTrack]) -> Result<usize> {
         product.push_attribute(("Company", "Swendl"));
         w.write_event(Event::Empty(product)).map_err(io)?;
 
-        write_collection(&mut w, tracks)?;
-        write_playlists(&mut w, tracks.len())?;
+        write_collection(&mut w, tracks, energy)?;
+        write_playlists(&mut w, tracks.len(), playlist)?;
 
         w.write_event(Event::End(BytesEnd::new("DJ_PLAYLISTS")))
             .map_err(io)?;
@@ -46,12 +51,16 @@ pub fn write_document(dest: &Path, tracks: &[&ExportTrack]) -> Result<usize> {
     Ok(tracks.len())
 }
 
-fn write_collection<W: Write>(w: &mut Writer<W>, tracks: &[&ExportTrack]) -> Result<()> {
+fn write_collection<W: Write>(
+    w: &mut Writer<W>,
+    tracks: &[&ExportTrack],
+    energy: bool,
+) -> Result<()> {
     let mut collection = BytesStart::new("COLLECTION");
     collection.push_attribute(("Entries", tracks.len().to_string().as_str()));
     w.write_event(Event::Start(collection)).map_err(io)?;
     for (i, track) in tracks.iter().enumerate() {
-        write_track(w, track, track_id(i))?;
+        write_track(w, track, track_id(i), energy)?;
     }
     w.write_event(Event::End(BytesEnd::new("COLLECTION")))
         .map_err(io)?;
@@ -64,8 +73,15 @@ fn track_id(index: usize) -> String {
     (index + 1).to_string()
 }
 
-fn write_track<W: Write>(w: &mut Writer<W>, track: &ExportTrack, id: String) -> Result<()> {
-    w.write_event(Event::Start(track_element(track, &id))).map_err(io)?;
+fn write_track<W: Write>(
+    w: &mut Writer<W>,
+    track: &ExportTrack,
+    id: String,
+    energy: bool,
+) -> Result<()> {
+    let comments = comments(track, energy);
+    w.write_event(Event::Start(track_element(track, &id, &comments)))
+        .map_err(io)?;
     for m in tempo_markers(track) {
         let mut tempo = BytesStart::new("TEMPO");
         tempo.push_attribute(("Inizio", format!("{:.3}", m.inizio_s).as_str()));
@@ -81,10 +97,33 @@ fn write_track<W: Write>(w: &mut Writer<W>, track: &ExportTrack, id: String) -> 
     Ok(())
 }
 
+/// The `Comments` value: the track's own comment, with the energy level in
+/// front of it when the run asked for one.
+///
+/// In front rather than behind, because rekordbox's Comments column is narrow
+/// and truncates — a marker at the end of a paragraph of liner notes is a
+/// marker nobody can see. The existing comment is kept: it is the user's text
+/// and this document may be the only copy of it they import.
+#[cfg(test)]
+pub fn comments_for_test(track: &ExportTrack, energy: bool) -> String {
+    comments(track, energy)
+}
+
+fn comments(track: &ExportTrack, energy: bool) -> String {
+    let own = track.track.comment.as_deref().unwrap_or("").trim();
+    let Some(level) = track.track.energy.filter(|_| energy) else {
+        return own.to_string();
+    };
+    if own.is_empty() {
+        return format!("Energy {level}");
+    }
+    format!("Energy {level} - {own}")
+}
+
 /// `Location` is the attribute that decides whether rekordbox finds the file at
 /// all, which is why it is written for every track even when everything else is
 /// unknown.
-fn track_element<'a>(track: &'a ExportTrack, id: &'a str) -> BytesStart<'a> {
+fn track_element<'a>(track: &'a ExportTrack, id: &'a str, comments: &'a str) -> BytesStart<'a> {
     let t = &track.track;
     let mut e = BytesStart::new("TRACK");
     e.push_attribute(("TrackID", id));
@@ -93,7 +132,7 @@ fn track_element<'a>(track: &'a ExportTrack, id: &'a str) -> BytesStart<'a> {
     e.push_attribute(("Album", t.album.as_deref().unwrap_or("")));
     e.push_attribute(("Genre", t.genre.as_deref().unwrap_or("")));
     e.push_attribute(("Grouping", t.grouping.as_deref().unwrap_or("")));
-    e.push_attribute(("Comments", t.comment.as_deref().unwrap_or("")));
+    e.push_attribute(("Comments", comments));
     e.push_attribute(("Kind", kind_attr(&t.extension).as_str()));
     push_numbers(&mut e, track);
     if !track.key_string.is_empty() {
@@ -172,7 +211,7 @@ fn parse_hex_rgb(hex: &str) -> Option<(u8, u8, u8)> {
 }
 
 /// `PLAYLISTS` -> root `NODE` -> one named node holding every track.
-fn write_playlists<W: Write>(w: &mut Writer<W>, count: usize) -> Result<()> {
+fn write_playlists<W: Write>(w: &mut Writer<W>, count: usize, playlist: &str) -> Result<()> {
     w.write_event(Event::Start(BytesStart::new("PLAYLISTS")))
         .map_err(io)?;
     let mut root = BytesStart::new("NODE");
@@ -182,7 +221,7 @@ fn write_playlists<W: Write>(w: &mut Writer<W>, count: usize) -> Result<()> {
     w.write_event(Event::Start(root)).map_err(io)?;
 
     let mut node = BytesStart::new("NODE");
-    node.push_attribute(("Name", PLAYLIST_NAME));
+    node.push_attribute(("Name", playlist));
     node.push_attribute(("Type", "1"));
     // KeyType 0 means the entries below reference TrackID.
     node.push_attribute(("KeyType", "0"));

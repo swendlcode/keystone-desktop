@@ -136,6 +136,56 @@ impl TrackRepository {
         Ok(())
     }
 
+    /// Points a row at a different file, keeping the row.
+    ///
+    /// For a track replaced by a better copy of itself — most often a master
+    /// that came back from Capstone. `path`, `filename` and `extension` move,
+    /// and so does the content hash, because that is what the peaks and
+    /// analysis caches are keyed on and the new file is different audio:
+    /// keeping the old hash would draw the old waveform over the new file.
+    ///
+    /// Everything the user or the engine decided stays: key, tempo, energy,
+    /// rating, and through `track_id`, the cues, beatgrid and collection
+    /// membership. `original_filename` and `rename_pattern` are left alone —
+    /// they describe the renamer's work on the old file and claiming them for
+    /// a file Keystone never renamed would make the inverse strip wrong.
+    ///
+    /// `analysis_version` is untouched on purpose. The row is still analysed,
+    /// and zeroing it would park the track in `needsAttention` as "not
+    /// analysed" while every number it carries is right there.
+    pub fn relink(
+        &self,
+        track_id: &str,
+        new_path: &str,
+        content_hash: Option<&str>,
+        size_bytes: Option<i64>,
+    ) -> Result<()> {
+        let path = std::path::Path::new(new_path);
+        let filename = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| new_path.to_string());
+        let extension = path
+            .extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+        self.conn()?.execute(
+            "UPDATE tracks SET path = ?1, filename = ?2, extension = ?3, \
+             content_hash = ?4, size_bytes = ?5, index_status = 'indexed', \
+             error_message = NULL, last_seen_at = ?6, updated_at = ?6 WHERE id = ?7",
+            rusqlite::params![
+                new_path,
+                filename,
+                extension,
+                content_hash,
+                size_bytes,
+                now(),
+                track_id
+            ],
+        )?;
+        Ok(())
+    }
+
     pub fn increment_play_count(&self, track_id: &str) -> Result<()> {
         self.conn()?.execute(
             "UPDATE tracks SET play_count = play_count + 1, last_played = ?1 WHERE id = ?2",

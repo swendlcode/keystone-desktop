@@ -213,7 +213,7 @@ fn spawn(target: &std::path::Path) -> Result<()> {
 }
 
 /// The app's own state, or the sentence that says how to get it.
-fn app_state<'a>(ctx: &'a McpContext, what: &str) -> Result<tauri::State<'a, AppState>> {
+pub(super) fn app_state<'a>(ctx: &'a McpContext, what: &str) -> Result<tauri::State<'a, AppState>> {
     use tauri::Manager;
     let live = ctx.live.as_ref().ok_or_else(|| {
         KeystoneError::Other(format!(

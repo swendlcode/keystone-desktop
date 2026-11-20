@@ -12,11 +12,17 @@ use serde_json::{json, Value};
 use super::McpContext;
 use crate::error::{KeystoneError, Result};
 
+mod analysis;
 mod collections;
 mod files;
 mod folders;
+mod from_filename;
+mod import;
+mod mixing;
+mod rekordbox;
 pub(super) mod library;
-mod tags;
+pub(super) mod tags;
+mod tempo;
 
 pub fn dispatch(ctx: &McpContext, tool: &str, args: &Value) -> Result<Value> {
     match tool {
@@ -30,6 +36,8 @@ pub fn dispatch(ctx: &McpContext, tool: &str, args: &Value) -> Result<Value> {
         "remove_watched_folder" => folders::remove_watched(ctx, args),
         "rescan_watched_folder" => folders::rescan(ctx, args),
         "launch_app" => folders::launch_app(ctx, args),
+        "import_tracks" => import::import_tracks(ctx, args),
+        "relink_track" => import::relink_track(ctx, args),
 
         // Correcting what the engine decided
         "set_key" => library::set_key(ctx, args),
@@ -37,6 +45,8 @@ pub fn dispatch(ctx: &McpContext, tool: &str, args: &Value) -> Result<Value> {
         "set_energy" => library::set_energy(ctx, args),
         "set_rating" => library::set_rating(ctx, args),
         "analyze_tracks" => library::analyze_tracks(ctx, args),
+        "suggest_tempo_fixes" => tempo::suggest(ctx, args),
+        "get_analysis_status" => analysis::get_status(ctx, args),
 
         // Collections
         "list_collections" => collections::list(ctx),
@@ -46,6 +56,8 @@ pub fn dispatch(ctx: &McpContext, tool: &str, args: &Value) -> Result<Value> {
         "add_to_collection" => collections::add_tracks(ctx, args),
         "get_collection_tracks" => collections::tracks(ctx, args),
         "reorder_collection" => collections::reorder(ctx, args),
+        "suggest_next" => mixing::suggest_next(ctx, args),
+        "build_set" => mixing::build_set(ctx, args),
         "remove_from_collection" => collections::remove_tracks(ctx, args),
 
         // Tags, written into the files themselves
@@ -54,6 +66,8 @@ pub fn dispatch(ctx: &McpContext, tool: &str, args: &Value) -> Result<Value> {
         "find_replace_tags" => tags::find_replace(ctx, args),
         "remove_extra_spaces" => tags::remove_extra_spaces(ctx, args),
         "write_key_and_tempo_tags" => tags::retag(ctx, args),
+        "tags_from_filename" => from_filename::run(ctx, args),
+        "preview_filename_parse" => from_filename::preview(ctx, args),
         "list_tag_backups" => tags::list_backups(ctx, args),
         "restore_tag_backup" => tags::restore_backup(ctx, args),
 
@@ -62,6 +76,7 @@ pub fn dispatch(ctx: &McpContext, tool: &str, args: &Value) -> Result<Value> {
         "export_files" => files::export(ctx, args),
         "export_collection_csv" => files::export_csv(ctx, args),
         "export_playlist_m3u" => files::export_m3u(ctx, args),
+        "export_rekordbox_xml" => rekordbox::export_xml(ctx, args),
 
         other => Err(KeystoneError::NotFound(format!("no tool named {other}"))),
     }

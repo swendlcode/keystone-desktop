@@ -68,6 +68,16 @@ pub async fn import_playlist_file(path: String, state: State<'_, AppState>) -> R
 /// playlist's tracks are scattered across the disk, so watching their parents
 /// would quietly adopt every unrelated folder they happen to live in — on a
 /// normal Music library, the whole of `~/Music`.
+///
+/// And it starts analysis, which is the half that was missing. Indexing and
+/// analysis are two stages that do not know about each other: the indexer
+/// writes rows and stops, and the queue only learns about unanalysed rows
+/// from `enqueue_pending`. Every other way into the library already called
+/// `spawn_analysis_after_indexing` — a dropped file, a watched folder, a
+/// rescan — and this one did not, so an import reported "50 queued" and then
+/// sat there with no key, tempo or energy until the next launch or an
+/// explicit analyze call. The import looked like it had worked and the
+/// analysis looked broken.
 fn enqueue(state: &State<'_, AppState>, files: Vec<PathBuf>) -> usize {
     if files.is_empty() {
         return 0;
@@ -81,6 +91,10 @@ fn enqueue(state: &State<'_, AppState>, files: Vec<PathBuf>) -> usize {
                 priority: JobPriority::Normal,
             })
             .collect(),
+    );
+    crate::commands::library_commands::spawn_analysis_after_indexing(
+        state.indexer.clone(),
+        state.queue.clone(),
     );
     count
 }

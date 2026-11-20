@@ -150,5 +150,7 @@ pub fn request(target: ExportTarget, overwrite: bool) -> ExportRequest {
         dry_run: false,
         output_path: None,
         run_id: "run-1".into(),
+        playlist_name: None,
+        include_energy: false,
     }
 }
